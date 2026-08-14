@@ -3,12 +3,17 @@ ask.py — retrieve relevant chunks, then have Claude answer using only that
 content, returning a structured (not just prose) response with real
 source citations.
 
-Retrieval is brand-aware: if the question names a known brand, we restrict
-the vector search to that brand's source files first. Pure semantic search
-alone tends to under-weight rare, specific tokens like brand names and model
-codes (e.g. "LPX", "D6X") in favor of documents with more generic vocabulary
-overlap — this pre-filter compensates for that.
+Retrieval combines two things: a literal keyword match against the
+structured catalog (data/catalog.json) for precise "which model" questions
+— vector search alone struggles here when many models share near-identical
+phrasing — plus the usual vector search over chunked text for everything
+else. Also brand-aware: if the question names a known brand, vector search
+is restricted to that brand's source files first.
 """
+import json
+import re
+from pathlib import Path
+
 from dotenv import load_dotenv
 import chromadb
 import anthropic
@@ -19,6 +24,15 @@ client = anthropic.Anthropic()
 
 chroma_client = chromadb.PersistentClient(path="chroma_db")
 collection = chroma_client.get_collection("trailer_specs")
+
+CATALOG_PATH = Path("data/catalog.json")
+CATALOG = json.loads(CATALOG_PATH.read_text()) if CATALOG_PATH.exists() else []
+
+STOPWORDS = {
+    "the", "a", "an", "on", "in", "at", "for", "of", "is", "are", "what",
+    "whats", "with", "and", "or", "to", "does", "do", "have", "has", "i",
+    "my", "me", "you", "your",
+}
 
 BRAND_SOURCES = {
     "diamond c": [
@@ -51,6 +65,47 @@ def detect_brand_filter(question):
         if brand in normalized:
             return sources
     return None
+
+
+def find_catalog_matches(question, brand_sources=None, top_n=3):
+    q_lower = question.lower()
+    q_words = set(re.findall(r"[a-z0-9]+", q_lower)) - STOPWORDS
+
+    candidates = CATALOG
+    if brand_sources:
+        candidates = [m for m in CATALOG if m.get("source") in brand_sources]
+
+    scored = []
+    for model in candidates:
+        name_words = set(re.findall(r"[a-z0-9]+", (model.get("model_name") or "").lower()))
+        score = len(q_words & name_words)
+        code = (model.get("model_code") or "").lower()
+        if code and re.search(rf"\b{re.escape(code)}\b", q_lower):
+            score += 5
+        if score > 0:
+            scored.append((score, model))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [m for _, m in scored[:top_n]]
+
+
+def format_catalog_match(m):
+    parts = [f"{m.get('model_code', '')} — {m.get('model_name', '')}"]
+    if m.get("axle_capacity_options_lb"):
+        opts = ", ".join(f"{x:g} lb" for x in m["axle_capacity_options_lb"])
+        parts.append(f"Axle capacity options: {opts}")
+    if m.get("num_axles") is not None:
+        parts.append(f"Axles: {m['num_axles']}")
+    if m.get("gvwr_min_lb") is not None or m.get("gvwr_max_lb") is not None:
+        parts.append(f"GVWR: {m.get('gvwr_min_lb')}\u2013{m.get('gvwr_max_lb')} lb")
+    if m.get("deck_length_ft_min") is not None:
+        parts.append(f"Deck length: {m.get('deck_length_ft_min')}\u2013{m.get('deck_length_ft_max')} ft")
+    if m.get("deck_width_in") is not None:
+        parts.append(f"Deck width: {m['deck_width_in']} in")
+    if m.get("empty_weight_lb") is not None:
+        parts.append(f"Empty weight: {m['empty_weight_lb']} lb")
+    parts.append(f"[Source: {m.get('source')}, page {m.get('page')}]")
+    return "; ".join(parts)
 
 
 ANSWER_TOOL = {
@@ -86,16 +141,26 @@ ANSWER_TOOL = {
 
 
 def ask(question, n_results=5):
-    query_kwargs = {"query_texts": [question], "n_results": n_results}
     brand_sources = detect_brand_filter(question)
+
+    query_kwargs = {"query_texts": [question], "n_results": n_results}
     if brand_sources:
         query_kwargs["where"] = {"source": {"$in": brand_sources}}
-
     results = collection.query(**query_kwargs)
-    context = "\n\n".join(
+
+    context_parts = [
         f"[Source: {m['source']}, page {m['page']}]\n{c}"
         for c, m in zip(results["documents"][0], results["metadatas"][0])
-    )
+    ]
+
+    catalog_matches = find_catalog_matches(question, brand_sources)
+    if catalog_matches:
+        catalog_block = "Structured catalog matches (verified spec data):\n" + "\n".join(
+            format_catalog_match(m) for m in catalog_matches
+        )
+        context_parts.insert(0, catalog_block)
+
+    context = "\n\n".join(context_parts)
 
     system_prompt = (
         "You are a trailer spec assistant for a trailer dealership. "
