@@ -41,27 +41,36 @@ def is_tabular_page(text):
 
 
 def chunk_text(text, size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+    """Return a list of (chunk_text, header_or_None) tuples. The header is
+    kept separate from the embedded text for table rows, so the embedding
+    stays focused on what makes that row distinct — the header gets
+    reattached later only when building context for Claude."""
     text = text.strip()
     if not text:
         return []
 
     if is_tabular_page(text):
-        # One chunk per row, with the header lines repeated for context,
-        # so a single model's spec doesn't get buried in one giant table blob.
         lines = [l.strip() for l in text.split("\n") if l.strip()]
-        header = "\n".join(lines[:2])
-        return [f"{header}\n{line}" for line in lines[2:] if looks_like_table_row(line)]
+        header_lines, row_lines = [], []
+        for line in lines:
+            if not row_lines and not looks_like_table_row(line):
+                header_lines.append(line)
+            elif looks_like_table_row(line):
+                row_lines.append(line)
+        header = " ".join(header_lines)
+        return [(line, header) for line in row_lines]
 
     if len(text) <= size:
-        return [text]
+        return [(text, None)]
 
     chunks = []
     start = 0
     while start < len(text):
-        chunk = text[start:start + size]
-        chunks.append(chunk.strip())
+        chunk = text[start:start + size].strip()
+        if chunk:
+            chunks.append((chunk, None))
         start += size - overlap
-    return [c for c in chunks if c]
+    return chunks
 
 def build_index():
     client = chromadb.PersistentClient(path=CHROMA_DIR)
@@ -84,10 +93,14 @@ def build_index():
     for pdf_path in pdf_files:
         print(f"Processing {pdf_path.name}...")
         for page_num, page_text in extract_pages(pdf_path):
-            for chunk_idx, chunk in enumerate(chunk_text(page_text)):
+            for chunk_idx, (chunk, header) in enumerate(chunk_text(page_text)):
                 all_ids.append(f"{pdf_path.stem}_p{page_num}_c{chunk_idx}")
                 all_docs.append(chunk)
-                all_metadatas.append({"source": pdf_path.name, "page": page_num})
+                all_metadatas.append({
+                    "source": pdf_path.name,
+                    "page": page_num,
+                    "header": header or "",
+                })
 
     print(f"Adding {len(all_docs)} chunks to the collection...")
     collection.add(ids=all_ids, documents=all_docs, metadatas=all_metadatas)
