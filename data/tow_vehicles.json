@@ -1,0 +1,83 @@
+[
+  {
+    "class_name": "Midsize truck/SUV",
+    "gvwr_lb": 6000,
+    "curb_weight_lb": 4500,
+    "payload_lb": 1500,
+    "gcwr_lb": 11000,
+    "max_tow_rating_lb": 6500,
+    "hitch_class": "III"
+  },
+  {
+    "class_name": "Half-ton pickup, 2WD, gas",
+    "gvwr_lb": 7000,
+    "curb_weight_lb": 5000,
+    "payload_lb": 2000,
+    "gcwr_lb": 16000,
+    "max_tow_rating_lb": 9000,
+    "hitch_class": "IV"
+  },
+  {
+    "class_name": "Half-ton pickup, 4WD, gas, tow package",
+    "gvwr_lb": 7200,
+    "curb_weight_lb": 5300,
+    "payload_lb": 1900,
+    "gcwr_lb": 17000,
+    "max_tow_rating_lb": 11000,
+    "hitch_class": "IV"
+  },
+  {
+    "class_name": "3/4-ton pickup, gas",
+    "gvwr_lb": 10000,
+    "curb_weight_lb": 6800,
+    "payload_lb": 3200,
+    "gcwr_lb": 20000,
+    "max_tow_rating_lb": 14500,
+    "hitch_class": "IV/V"
+  },
+  {
+    "class_name": "3/4-ton pickup, diesel",
+    "gvwr_lb": 10500,
+    "curb_weight_lb": 7300,
+    "payload_lb": 3200,
+    "gcwr_lb": 23000,
+    "max_tow_rating_lb": 17000,
+    "hitch_class": "V"
+  },
+  {
+    "class_name": "1-ton dually pickup, diesel",
+    "gvwr_lb": 14000,
+    "curb_weight_lb": 8500,
+    "payload_lb": 5500,
+    "gcwr_lb": 35000,
+    "max_tow_rating_lb": 30000,
+    "hitch_class": "V / gooseneck"
+  },
+  {
+    "class_name": "Class 3-4 chassis cab, diesel (e.g. F-450/F-550)",
+    "gvwr_lb": 14000,
+    "curb_weight_lb": 8612,
+    "payload_lb": 5303,
+    "gcwr_lb": 42800,
+    "max_tow_rating_lb": 35900,
+    "hitch_class": "5th-wheel/gooseneck"
+  },
+  {
+    "class_name": "Medium-duty commercial, Class 6-7 (e.g. F-650)",
+    "gvwr_lb": 26000,
+    "curb_weight_lb": 9500,
+    "payload_lb": 16500,
+    "gcwr_lb": 50000,
+    "max_tow_rating_lb": 40000,
+    "hitch_class": "5th-wheel/gooseneck (upfit-dependent)"
+  },
+  {
+    "class_name": "Semi-tractor, day cab (5-axle combination, no special permits)",
+    "gvwr_lb": 52000,
+    "curb_weight_lb": 18000,
+    "payload_lb": 18000,
+    "gcwr_lb": 80000,
+    "max_tow_rating_lb": 62000,
+    "hitch_class": "Fifth-wheel/kingpin (CDL required)"
+  }
+]
