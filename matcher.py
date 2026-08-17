@@ -2,7 +2,7 @@
 matcher.py — deterministic trailer-matching logic. Given a load, filters
 data/catalog.json for trailers that can actually handle it, and can check
 tow-vehicle compatibility against data/tow_vehicles.json. No LLM involved in
-the filtering itself — this is real math against real (or honestly
+the filtering itself -- this is real math against real (or honestly
 estimated) numbers, not a language model's guess.
 """
 import json
@@ -14,7 +14,7 @@ CATALOG = json.loads(CATALOG_PATH.read_text()) if CATALOG_PATH.exists() else []
 TOW_VEHICLES_PATH = Path("data/tow_vehicles.json")
 TOW_VEHICLES = json.loads(TOW_VEHICLES_PATH.read_text()) if TOW_VEHICLES_PATH.exists() else []
 
-# Rough category inference from model name — good enough to filter out
+# Rough category inference from model name -- good enough to filter out
 # obviously wrong-shaped trailers (e.g. a pipe trailer for an excavator),
 # not a precise engineering classification.
 CATEGORY_RULES = [
@@ -38,11 +38,11 @@ def infer_category(model_name):
 def get_trailer_capacity(model):
     """
     Returns (capacity_lb, source):
-      'stated_gvwr'          — a real GVWR value from the source document (most reliable)
-      'estimated_from_axles' — num_axles x best axle-capacity option, a common
-                                industry approximation — NOT the same as true GVWR,
+      'stated_gvwr'          -- a real GVWR value from the source document (most reliable)
+      'estimated_from_axles' -- num_axles x best axle-capacity option, a common
+                                industry approximation -- NOT the same as true GVWR,
                                 since it ignores the trailer's own empty weight
-      (None, None)           — not enough data to verify this model at all
+      (None, None)           -- not enough data to verify this model at all
     """
     gvwr_max = model.get("gvwr_max_lb")
     if gvwr_max:
@@ -59,7 +59,7 @@ def get_trailer_capacity(model):
 def find_trailer_matches(load_weight_lb, load_length_ft=None, categories=None, catalog=None):
     """
     categories: optional iterable of category strings (see CATEGORY_RULES) to
-    restrict results to — e.g. {"dump", "equipment", "carhauler"} for heavy
+    restrict results to -- e.g. {"dump", "equipment", "carhauler"} for heavy
     equipment. None means no category filtering (all types considered).
     """
     catalog = catalog if catalog is not None else CATALOG
@@ -104,31 +104,36 @@ def get_tow_vehicle(class_name):
 def check_tow_compatibility(trailer_capacity_lb, tow_vehicle):
     """
     Checks whether a tow vehicle can safely handle a trailer at its full
-    rated capacity (GVWR) — the standard conservative assumption, since a
+    rated capacity (GVWR) -- the standard conservative assumption, since a
     trailer should be safe to tow at any legal load, not just today's load.
     Tongue weight is estimated as 10-15% of trailer gross weight (a standard
     rule of thumb for conventional ball-hitch setups), checked against the
-    tow vehicle's payload capacity.
+    tow vehicle's payload capacity. Every check reports its margin, not just
+    pass/fail -- a check that barely passes deserves to be flagged as such.
     """
     tongue_min = trailer_capacity_lb * 0.10
     tongue_max = trailer_capacity_lb * 0.15
+    required_gcwr = tow_vehicle["gvwr_lb"] + trailer_capacity_lb
 
-    tow_rating_ok = tow_vehicle["max_tow_rating_lb"] >= trailer_capacity_lb
-    gcwr_ok = tow_vehicle["gcwr_lb"] >= (tow_vehicle["gvwr_lb"] + trailer_capacity_lb)
-    tongue_ok = tow_vehicle["payload_lb"] >= tongue_max
+    tow_rating_margin = tow_vehicle["max_tow_rating_lb"] - trailer_capacity_lb
+    gcwr_margin = tow_vehicle["gcwr_lb"] - required_gcwr
+    tongue_margin = tow_vehicle["payload_lb"] - tongue_max
 
     return {
         "tow_vehicle_class": tow_vehicle["class_name"],
         "trailer_capacity_lb": trailer_capacity_lb,
-        "tow_rating_ok": tow_rating_ok,
+        "tow_rating_ok": tow_rating_margin >= 0,
         "tow_rating_lb": tow_vehicle["max_tow_rating_lb"],
-        "gcwr_ok": gcwr_ok,
+        "tow_rating_margin_lb": tow_rating_margin,
+        "gcwr_ok": gcwr_margin >= 0,
         "gcwr_lb": tow_vehicle["gcwr_lb"],
-        "required_gcwr_lb": tow_vehicle["gvwr_lb"] + trailer_capacity_lb,
+        "required_gcwr_lb": required_gcwr,
+        "gcwr_margin_lb": gcwr_margin,
         "tongue_weight_range_lb": (round(tongue_min), round(tongue_max)),
-        "tongue_ok": tongue_ok,
+        "tongue_ok": tongue_margin >= 0,
         "payload_lb": tow_vehicle["payload_lb"],
-        "overall_ok": tow_rating_ok and gcwr_ok and tongue_ok,
+        "tongue_margin_lb": tongue_margin,
+        "overall_ok": tow_rating_margin >= 0 and gcwr_margin >= 0 and tongue_margin >= 0,
     }
 
 
@@ -150,7 +155,7 @@ if __name__ == "__main__":
     print(f"Trailers that can handle a {load:g} lb load" + (f" (categories: {categories})" if categories else "") + ":\n")
     for m in results[:10]:
         print(
-            f"  {m['model_code']} ({m['model_name']}, {m['category']}) — capacity {m['capacity_lb']:g} lb "
+            f"  {m['model_code']} ({m['model_name']}, {m['category']}) -- capacity {m['capacity_lb']:g} lb "
             f"[{m['capacity_source']}], margin +{m['margin_lb']:g} lb, source: {m['source']}"
         )
     print(f"\n{len(results)} total matches.")
@@ -163,7 +168,7 @@ if __name__ == "__main__":
             verdict = "OK" if check["overall_ok"] else "NOT SAFE"
             print(
                 f"  {vehicle['class_name']}: {verdict} "
-                f"(tow rating {'OK' if check['tow_rating_ok'] else 'FAIL'}, "
-                f"GCWR {'OK' if check['gcwr_ok'] else 'FAIL'}, "
-                f"tongue weight {'OK' if check['tongue_ok'] else 'FAIL'})"
+                f"(tow rating {'OK' if check['tow_rating_ok'] else 'FAIL'} margin {check['tow_rating_margin_lb']:+.0f}, "
+                f"GCWR {'OK' if check['gcwr_ok'] else 'FAIL'} margin {check['gcwr_margin_lb']:+.0f}, "
+                f"tongue weight {'OK' if check['tongue_ok'] else 'FAIL'} margin {check['tongue_margin_lb']:+.0f})"
             )
