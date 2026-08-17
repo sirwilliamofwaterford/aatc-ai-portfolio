@@ -20,6 +20,20 @@ client = anthropic.Anthropic()
 
 TOW_VEHICLE_CLASS_NAMES = [v["class_name"] for v in TOW_VEHICLES]
 
+# Hard cap on tool-call iterations within a single match_chat() call. This is
+# a public demo billed against a real API key -- normal usage resolves in 1-2
+# iterations (ask a follow-up and stop, or call the tool once and explain the
+# result), so this cap only ever matters as a backstop against a pathological
+# case where the model keeps calling the tool instead of answering, which
+# would otherwise burn an unbounded number of API calls on one user message.
+MAX_TOOL_ITERATIONS = 6
+
+FALLBACK_MESSAGE = (
+    "I'm having trouble narrowing this down after a few tries -- let's reset. "
+    "Can you tell me in one message: what you're hauling, roughly how much it "
+    "weighs, and what you're towing with?"
+)
+
 FIND_MATCH_TOOL = {
     "name": "find_trailer_match",
     "description": (
@@ -111,11 +125,16 @@ def match_chat(messages):
     None if no tool was called (e.g. Claude just asked a follow-up question).
     The caller is responsible for appending both the user's message and the
     reply to their own history.
+
+    Bounded to MAX_TOOL_ITERATIONS tool-call rounds -- see the constant's
+    comment above. If that cap is ever hit without a plain-text reply, this
+    returns a fallback message asking the user to restate things, rather
+    than looping indefinitely.
     """
     working_messages = list(messages)
     last_result = None
 
-    while True:
+    for _ in range(MAX_TOOL_ITERATIONS):
         response = client.messages.create(
             model="claude-sonnet-5",
             max_tokens=1500,
@@ -143,6 +162,10 @@ def match_chat(messages):
                 "content": json.dumps(result),
             })
         working_messages.append({"role": "user", "content": tool_results})
+
+    # Exhausted MAX_TOOL_ITERATIONS without ever getting a plain-text reply --
+    # stop here instead of looping indefinitely.
+    return (FALLBACK_MESSAGE, last_result)
 
 
 if __name__ == "__main__":
