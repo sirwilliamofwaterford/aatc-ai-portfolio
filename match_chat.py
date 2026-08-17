@@ -1,9 +1,9 @@
 """
-match_chat.py — conversational trailer-matching layer. Unlike ask.py (which
+match_chat.py -- conversational trailer-matching layer. Unlike ask.py (which
 answers each question independently), this holds the full conversation and
 lets Claude choose between asking a clarifying follow-up question and
 calling the find_trailer_match tool once it has enough information. The
-actual matching math is never done by Claude — matcher.py runs the real,
+actual matching math is never done by Claude -- matcher.py runs the real,
 deterministic filtering and safety checks; Claude's job is gathering the
 right inputs and explaining the results in plain language.
 """
@@ -25,7 +25,7 @@ FIND_MATCH_TOOL = {
     "description": (
         "Search the trailer catalog and, if a tow vehicle is known, check "
         "tow-vehicle compatibility for a specific load. Only call this once "
-        "you actually know the load's weight from the conversation — never "
+        "you actually know the load's weight from the conversation -- never "
         "estimate or guess a weight. If you don't have enough information "
         "yet, respond in plain text asking the user instead of calling this."
     ),
@@ -34,7 +34,7 @@ FIND_MATCH_TOOL = {
         "properties": {
             "load_weight_lb": {
                 "type": "number",
-                "description": "The weight of what's being hauled, in lbs. Required — never estimate this yourself.",
+                "description": "The weight of what's being hauled, in lbs. Required -- never estimate this yourself.",
             },
             "load_description": {
                 "type": "string",
@@ -106,10 +106,14 @@ def match_chat(messages):
     """
     messages: list of {"role": "user"|"assistant", "content": ...} dicts,
     the full conversation so far including the user's latest message.
-    Returns the assistant's reply text. The caller is responsible for
-    appending both the user's message and this reply to their own history.
+    Returns (reply_text, last_result) -- last_result is the structured
+    find_trailer_match output from the most recent tool call this turn, or
+    None if no tool was called (e.g. Claude just asked a follow-up question).
+    The caller is responsible for appending both the user's message and the
+    reply to their own history.
     """
     working_messages = list(messages)
+    last_result = None
 
     while True:
         response = client.messages.create(
@@ -125,13 +129,14 @@ def match_chat(messages):
 
         if not tool_use_blocks:
             text_block = next((b for b in response.content if b.type == "text"), None)
-            return text_block.text if text_block else ""
+            return (text_block.text if text_block else "", last_result)
 
         working_messages.append({"role": "assistant", "content": response.content})
 
         tool_results = []
         for block in tool_use_blocks:
             result = run_match_tool(block.input)
+            last_result = result
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,
@@ -148,6 +153,6 @@ if __name__ == "__main__":
         if user_input.lower() in ("quit", "exit"):
             break
         history.append({"role": "user", "content": user_input})
-        reply = match_chat(history)
+        reply, _ = match_chat(history)
         history.append({"role": "assistant", "content": reply})
         print(f"\nAssistant: {reply}\n")
