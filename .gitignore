@@ -5,4 +5,5 @@ __pycache__/
 .env
 notes/
 data/
+!data/tow_vehicles.json
 chroma_db/
