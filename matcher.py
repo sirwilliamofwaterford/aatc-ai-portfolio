@@ -88,6 +88,11 @@ def find_trailer_matches(load_weight_lb, load_length_ft=None, categories=None, c
             "capacity_source": source,
             "margin_lb": capacity_lb - load_weight_lb,
             "deck_length_ft_max": model.get("deck_length_ft_max"),
+            # Real per-listing AATC product page, set directly from the live
+            # scrape (scrape_catalog.py -> normalize.py). Lets app.py link
+            # straight to the exact trailer being recommended instead of a
+            # same-category fallback page.
+            "product_url": model.get("product_url"),
         })
 
     matches.sort(key=lambda m: m["margin_lb"])

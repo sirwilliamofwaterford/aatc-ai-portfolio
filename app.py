@@ -268,10 +268,19 @@ SOURCE_TO_AATC_BRAND_URL = {
 
 def get_aatc_link(m):
     """
-    Prefer a category-specific AATC page (more relevant, often multi-brand);
-    fall back to the brand's general page if no matching category exists
-    (e.g. 'pipe' trailers aren't a category AATC carries).
+    Prefer the exact real product page for this trailer -- product_url is
+    set directly from the live site scrape (scrape_catalog.py ->
+    normalize.py), so this links straight to the precise listing being
+    recommended rather than a same-category page. Falls back to a
+    category-specific AATC page, then the brand's general page, only for
+    matches that didn't come from the scraped catalog and so have no
+    product_url of their own (e.g. older PDF-derived data, or a 'pipe'
+    trailer -- not a category AATC carries a dedicated page for).
     """
+    product_url = m.get("product_url")
+    if product_url:
+        return product_url, "listing"
+
     category = m.get("category")
     name = (m.get("model_name") or "").lower()
 
@@ -305,12 +314,18 @@ def _status_row(ok, label, margin):
 
 
 def build_match_card_html(m):
-    code = html_lib.escape(str(m.get("model_code", "")))
-    name = html_lib.escape(str(m.get("model_name", "")))
+    # `or ""` rather than a .get() default -- real scraped listings can have
+    # model_code/source present in the dict but set to None (e.g. the
+    # "Custom Trailers" listing has no single model code and no listed
+    # Trailer Brand), and a plain default only kicks in when the key is
+    # missing entirely, not when it's there with a None value. Without this,
+    # a None renders as the literal text "None" in the card.
+    code = html_lib.escape(str(m.get("model_code") or ""))
+    name = html_lib.escape(str(m.get("model_name") or ""))
     category = m.get("category") or "other"
     cat_label = html_lib.escape(category.replace("_", " ").title())
     icon_svg = CATEGORY_ICONS.get(category, DEFAULT_ICON)
-    source = html_lib.escape(str(m.get("source", "")))
+    source = html_lib.escape(str(m.get("source") or ""))
     capacity = m.get("capacity_lb")
     margin = m.get("margin_lb")
 
@@ -341,12 +356,20 @@ def build_match_card_html(m):
     link, link_kind = get_aatc_link(m)
     link_html = ""
     if link:
-        label = (
-            "See current inventory for this brand at AATC"
-            if link_kind == "brand"
-            else f"See current {link_kind} inventory at AATC"
-        )
+        if link_kind == "listing":
+            label = "View this exact listing at AATC"
+        elif link_kind == "brand":
+            label = "See current inventory for this brand at AATC"
+        else:
+            label = f"See current {link_kind} inventory at AATC"
         link_html = f'<a class="aatc-card-link" href="{link}" target="_blank" rel="noopener">{html_lib.escape(label)} &rarr;</a>'
+
+    # code/source can legitimately be empty (real example: the "Custom
+    # Trailers" listing has no single model code and no listed Trailer
+    # Brand) -- skip the leading code space / the middot separator rather
+    # than rendering "  Custom Trailers..." or "Carhauler &middot; ".
+    title_html = f'{code} <span class="aatc-card-name">{name}</span>' if code else f'<span class="aatc-card-name">{name}</span>'
+    meta_html = f'{cat_label} &middot; {source}' if source else cat_label
 
     # Built as one unbroken string with no blank lines anywhere in it.
     # Streamlit's markdown renderer treats a blank line inside a raw <div>
@@ -358,8 +381,8 @@ def build_match_card_html(m):
         '<div class="aatc-card-head">'
         f'<div class="aatc-card-icon">{icon_svg}</div>'
         '<div>'
-        f'<div class="aatc-card-title">{code} <span class="aatc-card-name">{name}</span></div>'
-        f'<div class="aatc-card-meta">{cat_label} &middot; {source}</div>'
+        f'<div class="aatc-card-title">{title_html}</div>'
+        f'<div class="aatc-card-meta">{meta_html}</div>'
         '</div>'
         '</div>'
         f'{capacity_html}'
