@@ -7,3 +7,12 @@ notes/
 data/*
 !data/tow_vehicles.json
 chroma_db/
+.streamlit/secrets.toml
+.streamlit/secrets.toml
+secrets.toml
+test_sf.py
+check_parts.py
+check_pbe.py
+check_addon_prices.py
+query_test.py
+*.env

@@ -1,469 +1,711 @@
-"""
-app.py -- Streamlit UI for the Trailer Spec & Fit Assistant. Two modes:
-free-form spec Q&A (ask.py) and a conversational trailer matcher that can
-ask follow-up questions and check tow-vehicle safety (match_chat.py).
-"""
-import html as html_lib
-
 import streamlit as st
-from ask import ask
-from match_chat import match_chat
+import json
+import os
+import re
+import urllib.parse
+from simple_salesforce import Salesforce
 
-st.set_page_config(page_title="Trailer Spec Assistant", page_icon="üöõ", layout="wide")
-
-# ---------------------------------------------------------------------------
-# Basic abuse/cost safeguards. This is a public demo billed against a real
-# API key, so these caps exist to keep worst-case cost bounded per browsing
-# session -- not a substitute for setting a hard spending limit on the API
-# key itself in the Anthropic Console, which is the real financial backstop.
-# Tune these based on real traffic once the app is live.
-# ---------------------------------------------------------------------------
-MAX_QA_MESSAGES_PER_SESSION = 30
-MAX_MATCH_MESSAGES_PER_SESSION = 20
-MAX_INPUT_CHARS = 800
-
-SESSION_LIMIT_MSG = (
-    "You've reached this demo's message limit for one browsing session "
-    "(this cap exists to keep the demo's API costs in check, not because "
-    "you did anything wrong). Refresh the page to start a fresh session."
+# -----------------------------------------------------------------------------
+# PAGE CONFIGURATION
+# -----------------------------------------------------------------------------
+st.set_page_config(
+    page_title="AATC Trailer Configurator & Quote Builder",
+    page_icon="??",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
+# -----------------------------------------------------------------------------
+# MODERN STYLING
+# -----------------------------------------------------------------------------
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; color: #0f172a; }
+    .stApp { background-color: #f8fafc; }
+    .wizard-header { text-align: center; max-width: 780px; margin: 0 auto 2rem auto; padding-top: 1rem; }
+    .wizard-badge { display: inline-block; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 6px 14px; border-radius: 9999px; margin-bottom: 0.75rem; }
+    .wizard-title { font-size: 2.25rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem; letter-spacing: -0.5px; }
+    .wizard-sub { font-size: 1.05rem; color: #64748b; line-height: 1.5; }
+    .step-bar { display: flex; justify-content: space-between; max-width: 850px; margin: 0 auto 2.5rem auto; }
+    .step-node { display: flex; flex-direction: column; align-items: center; }
+    .step-circle { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; }
+    .step-active { background: #2563eb; color: #ffffff; box-shadow: 0 0 0 4px #dbeafe; }
+    .step-done { background: #059669; color: #ffffff; }
+    .step-todo { background: #e2e8f0; color: #64748b; }
+    .step-text { font-size: 0.75rem; font-weight: 600; margin-top: 6px; color: #475569; }
+    .question-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03); }
+    .card-heading { font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 0.25rem; }
+    .card-desc { font-size: 0.9rem; color: #64748b; margin-bottom: 1.25rem; }
+    .result-summary-box { background: linear-gradient(135deg, #091e3a 0%, #1e293b 100%); color: white; border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25); }
+    .trailer-result-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.75rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04); transition: transform 0.2s ease; }
+    .trailer-result-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.08); }
+    .spec-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-top: 1.25rem; padding: 1rem 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; }
+    .spec-item { display: flex; flex-direction: column; }
+    .spec-label { font-size: 0.7rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .spec-val { font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-top: 2px; }
+    .fit-badge { display: inline-block; padding: 6px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+    .fit-safe { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .fit-warn { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+    .build-box { background: #ffffff; border: 2px solid #2563eb; border-radius: 14px; padding: 1.75rem; margin-bottom: 1.5rem; }
+    .price-total-badge { background: #059669; color: white; padding: 6px 14px; border-radius: 8px; font-size: 1.3rem; font-weight: 800; }
+    .accessory-group { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; }
+    .labor-tag { display: inline-block; background: #f0fdf4; color: #166534; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; border: 1px solid #bbf7d0; margin-left: 6px; }
+    .disclaimer-card { background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #64748b; border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; font-size: 0.8rem; color: #475569; line-height: 1.5; }
+</style>
+""", unsafe_allow_html=True)
 
-def _too_long_warning(text):
-    st.warning(
-        f"That message is a bit long for this demo ({len(text):,} characters, "
-        f"{MAX_INPUT_CHARS:,} max) -- try trimming it down and asking again."
-    )
+# -----------------------------------------------------------------------------
+# PARSING & HELPERS
+# -----------------------------------------------------------------------------
+def clean_int(val, default=0):
+    if isinstance(val, (int, float)): return int(val)
+    if isinstance(val, str):
+        digits = re.sub(r"[^\d]", "", val)
+        if digits: return int(digits)
+    return default
 
+def sanitize_brakes(brakes_str, gvwr):
+    if not brakes_str or brakes_str.strip() in ["ñ", "-", "None", ""]:
+        return "Idler Axle (Non-Brake < 3K)" if gvwr <= 3000 else "Standard Electric Brakes"
+    return brakes_str.strip()
 
-# ---------------------------------------------------------------------------
-# Brand styling -- colors pulled from the actual AATC logo (navy / white / red).
-# Everything visual lives in this one CSS block so the palette is easy to tweak
-# later without hunting through the rest of the file.
-# ---------------------------------------------------------------------------
-AATC_CSS = """
-:root{
-  --aatc-navy:#0b1a33;
-  --aatc-navy-2:#132745;
-  --aatc-red:#d1272b;
-  --aatc-red-dark:#a81f22;
-  --aatc-white:#ffffff;
-  --aatc-ink:#1c2430;
-  --aatc-muted:#5b6470;
-  --aatc-line:#e2e6ec;
-  --aatc-good:#1a7f37;
-  --aatc-bad:#c22b2b;
-  --aatc-bg:#f5f6f8;
+def get_labor_hours(item_name):
+    """Estimates technician flat-rate shop hours based on installation task."""
+    name_u = item_name.upper()
+    if "TARP" in name_u:
+        return 1.0
+    elif "LADDER RACK" in name_u:
+        return 1.25
+    elif "E TRACK" in name_u:
+        return 1.0
+    elif "TRIMMER" in name_u or "WEEDEATER" in name_u:
+        return 0.75
+    elif "BLOWER" in name_u or "TOOL RACK" in name_u or "COOLER" in name_u:
+        return 0.5
+    elif "WINCH" in name_u:
+        return 0.5
+    elif "SPARE" in name_u or "MOUNT" in name_u:
+        return 0.25
+    return 0.5
+
+# -----------------------------------------------------------------------------
+# SALESFORCE CLIENT & INVENTORY LOADER
+# -----------------------------------------------------------------------------
+@st.cache_resource
+def get_salesforce_connection():
+    try:
+        # test_sf removed for cloud deploy
+        return Salesforce(
+            username=test_sf.SF_USERNAME,
+            password=test_sf.SF_PASSWORD,
+            security_token=test_sf.SF_SECURITY_TOKEN,
+            domain=test_sf.SF_DOMAIN
+        )
+    except Exception:
+        try:
+            sf_sec = st.secrets.get("salesforce", {})
+            if sf_sec.get("username"):
+                return Salesforce(
+                    username=sf_sec["username"],
+                    password=sf_sec["password"],
+                    security_token=sf_sec["security_token"],
+                    domain=sf_sec.get("domain", "login")
+                )
+        except Exception:
+            pass
+    return None
+
+@st.cache_data(ttl=600)
+def load_live_catalog():
+    sf = get_salesforce_connection()
+    if sf:
+        try:
+            pbe_query = """
+                SELECT Product2.Id, Product2.Name, Product2.Make__c, Product2.SKU_Model__c,
+                       Product2.StockKeepingUnit, Product2.Family, Product2.GVWR__c,
+                       Product2.Load_Capacity__c, Product2.Length__c, Product2.Brake_Type__c,
+                       Product2.Tongue_Type__c, Product2.Total_Stock__c, Product2.In_Stock__c,
+                       Product2.Used_Sku__c, UnitPrice
+                FROM PricebookEntry
+                WHERE IsActive = True
+                  AND Product2.Make__c != null
+                  AND (Product2.Total_Stock__c > 0 OR Product2.In_Stock__c > 0)
+            """
+            records = sf.query_all(pbe_query).get("records", [])
+            if records:
+                standardized = []
+                for r in records:
+                    p = r.get("Product2", {})
+                    title = p.get("Name") or p.get("SKU_Model__c") or "Trailer Unit"
+                    brand = p.get("Make__c") or "AATC Stock"
+                    family = p.get("Family") or "Utility / Equipment"
+                    gvwr = clean_int(p.get("GVWR__c"), default=0)
+                    payload = clean_int(p.get("Load_Capacity__c"), default=0)
+                    empty = gvwr - payload if (gvwr > 0 and payload > 0 and gvwr > payload) else int(gvwr * 0.28)
+                    sku = p.get("SKU_Model__c") or p.get("StockKeepingUnit") or ""
+                    retail_price = float(r.get("UnitPrice") or 0.0)
+
+                    url = f"https://allamericantrailer.com/trailers/?search={urllib.parse.quote(f'{brand} {sku}'.strip())}"
+
+                    standardized.append({
+                        "id": p.get("Id"),
+                        "brand": brand,
+                        "model_name": title,
+                        "sku": sku,
+                        "category": family,
+                        "condition": "Used" if p.get("Used_Sku__c") else "New",
+                        "gvwr": gvwr,
+                        "payload": payload,
+                        "empty_weight": empty,
+                        "dimensions": p.get("Length__c") or "Standard Size",
+                        "axles": sanitize_brakes(p.get("Brake_Type__c"), gvwr),
+                        "price": retail_price,
+                        "in_stock": int(p.get("Total_Stock__c") or p.get("In_Stock__c") or 1),
+                        "url": url
+                    })
+                return standardized
+        except Exception:
+            pass
+
+    # Fallback catalog
+    for fn in ["data/catalog_raw.json", "data/normalized_catalog.json"]:
+        if os.path.exists(fn):
+            try:
+                with open(fn, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    standardized = []
+                    for item in data:
+                        title = str(item.get("title") or item.get("name") or "")
+                        url = str(item.get("url") or item.get("product_url") or "https://allamericantrailer.com")
+                        add_info = item.get("additional_information", {})
+                        specs = item.get("specifications", {})
+                        brand = str(item.get("brand") or add_info.get("Trailer Brand") or "AATC Stock").strip()
+                        category = str(item.get("category") or add_info.get("Trailer Type") or "Equipment").strip()
+                        gvwr = clean_int(add_info.get("GVWR") or specs.get("G.V.W.R."), default=0)
+                        payload = clean_int(add_info.get("Load Capacity"), default=0)
+                        empty = gvwr - payload if (gvwr > 0 and payload > 0) else int(gvwr * 0.28)
+                        if "truck bed" in title.lower() or "bin only" in title.lower() or gvwr < 2000:
+                            continue
+                        standardized.append({
+                            "brand": brand,
+                            "model_name": title,
+                            "category": category,
+                            "condition": "New",
+                            "gvwr": gvwr,
+                            "payload": payload,
+                            "empty_weight": empty,
+                            "dimensions": add_info.get("Length") or "Standard Length",
+                            "axles": sanitize_brakes(add_info.get("Brake Type"), gvwr),
+                            "price": 5495.00,
+                            "in_stock": 1,
+                            "url": url
+                        })
+                    return standardized
+            except Exception:
+                pass
+    return []
+
+@st.cache_data(ttl=600)
+def load_live_accessories():
+    """Queries active parts and installed accessories from PricebookEntry."""
+    sf = get_salesforce_connection()
+    if sf:
+        try:
+            query = """
+                SELECT Id, Product2.Id, Product2.Name, Product2.StockKeepingUnit, UnitPrice
+                FROM PricebookEntry
+                WHERE IsActive = True
+                  AND (Product2.Name LIKE '%TARP%'
+                    OR Product2.Name LIKE '%RACK%'
+                    OR Product2.Name LIKE '%COOLER%'
+                    OR Product2.Name LIKE '%E TRACK%'
+                    OR Product2.Name LIKE '%STRAP%'
+                    OR Product2.Name LIKE '%SPARE%')
+                  AND Product2.Make__c = null
+                ORDER BY UnitPrice ASC
+            """
+            results = sf.query_all(query).get("records", [])
+            acc_list = []
+            for r in results:
+                p = r.get("Product2", {})
+                name = p.get("Name")
+                price = float(r.get("UnitPrice") or 0.0)
+                if price <= 0:
+                    continue
+                cat = "Universal"
+                name_u = name.upper()
+                if "DUMP" in name_u or "TARP" in name_u:
+                    cat = "Dump"
+                elif "ENCLOSED" in name_u or "E TRACK" in name_u or "LADDER RACK" in name_u:
+                    cat = "Enclosed"
+                elif "OPEN" in name_u or "WEEDEATER" in name_u or "TRIMMER" in name_u or "BLOWER" in name_u or "COOLER" in name_u:
+                    cat = "Landscape"
+
+                acc_list.append({
+                    "id": p.get("Id"),
+                    "name": name,
+                    "price": price,
+                    "category": cat,
+                    "labor_hours": get_labor_hours(name)
+                })
+            return acc_list
+        except Exception:
+            pass
+
+    return [
+        {"name": "5 X 12 DUMP TARP INSTALLED", "price": 315.00, "category": "Dump", "labor_hours": 1.0},
+        {"name": "6 X 14 DUMP TARP INSTALLED", "price": 315.00, "category": "Dump", "labor_hours": 1.0},
+        {"name": "8 X 22 STANDARD TARP MECHANISM INSTALLED", "price": 350.00, "category": "Dump", "labor_hours": 1.25},
+        {"name": "LOCKABLE 4 TRIMMER RACKS WITH PADLOCKS INSTALLED OPEN TRAILER", "price": 290.00, "category": "Landscape", "labor_hours": 0.75},
+        {"name": "6 POSITION TOOL RACK INSTALLED OPEN TRAILER", "price": 150.00, "category": "Landscape", "labor_hours": 0.5},
+        {"name": "BACKPACK LOCKABLE BLOWER RACK INSTALLED OPEN/ENCL", "price": 310.00, "category": "Landscape", "labor_hours": 0.5},
+        {"name": "(2) LADDER RACKS INSTALLED ON TOP ENCLOSED", "price": 350.00, "category": "Enclosed", "labor_hours": 1.25},
+        {"name": "(3) LADDER RACKS INSTALLED ON TOP ENCLOSED", "price": 475.00, "category": "Enclosed", "labor_hours": 1.5},
+        {"name": "INSTALL 2 STRIPS OF E TRACK ON FLOOR, UP TO 20FT", "price": 235.00, "category": "Enclosed", "labor_hours": 1.0},
+        {"name": "2 PAIR AATC WEEDEATER RACKS INSTALLED IN ENCLOSED TRAILER", "price": 180.00, "category": "Enclosed", "labor_hours": 0.75},
+        {"name": "ALUMINUM STUD STYLE SPARE TIRE MOUNT", "price": 26.00, "category": "Universal", "labor_hours": 0.25},
+        {"name": "1 WELD ON STRAP WINCHES INSTALLED WITH 4X30 STRAPS", "price": 200.00, "category": "Universal", "labor_hours": 0.5},
+        {"name": "2 WELD ON STRAP WINCHES INSTALLED WITH 4X30 STRAPS", "price": 270.00, "category": "Universal", "labor_hours": 0.75}
+    ]
+
+# -----------------------------------------------------------------------------
+# CONSTANTS & CONFIGS
+# -----------------------------------------------------------------------------
+CARGO_PRESETS = {
+    "?? Compact Tractor / Mowers (Under 3,500 lbs)": 3500,
+    "?? Car / Small SUV / Light Equipment (4,000 - 6,000 lbs)": 5500,
+    "?? Skid Steer / Mini Excavator (7,500 - 10,000 lbs)": 9000,
+    "?? Heavy Equipment / Full Dump Load (11,000 - 16,000 lbs)": 14000,
+    "?? General Cargo / Moving / Landscaping (1,500 - 3,500 lbs)": 2500,
+    "?? Custom Weight Entry": 0
 }
 
-.stApp{ background: var(--aatc-bg); }
-
-/* ---- Hero banner (mimics the AATC logo: navy field, bold italic white
-   wordmark, red star + red underline) ---- */
-.aatc-hero{
-  background: linear-gradient(135deg, var(--aatc-navy) 0%, var(--aatc-navy-2) 100%);
-  border-radius: 12px;
-  padding: 22px 22px;
-  margin-bottom: 16px;
-  border-bottom: 4px solid var(--aatc-red);
-  box-shadow: 0 4px 14px rgba(11,26,51,0.25);
-  text-align: center;
-}
-.aatc-hero-title{
-  color: var(--aatc-white); font-weight: 800; font-style: italic;
-  font-size: 30px; letter-spacing: .02em; text-transform: uppercase; margin:0;
-  display:flex; align-items:center; justify-content:center; gap:10px;
-}
-.aatc-hero-star{ color: var(--aatc-red); font-size: 24px; font-style: normal; }
-.aatc-hero-title-accent{ color: var(--aatc-red); }
-.aatc-hero-sub{ color:#c9d3e0; font-size:14px; margin:6px 0 0; font-style:normal; }
-
-/* ---- Tabs ---- */
-button[data-baseweb="tab"]{ font-weight:600; color: var(--aatc-muted); }
-button[data-baseweb="tab"][aria-selected="true"]{ color: var(--aatc-navy); }
-div[data-baseweb="tab-highlight"]{ background-color: var(--aatc-red) !important; }
-
-/* ---- Chat messages ---- */
-[data-testid="stChatMessage"]{
-  background: var(--aatc-white);
-  border: 1px solid var(--aatc-line);
-  border-radius: 12px;
-  padding: 4px 6px;
-  box-shadow: 0 1px 3px rgba(11,26,51,0.06);
+TOW_VEHICLES = {
+    "Mid-Size SUV / Light Truck (Tacoma, Explorer, Colorado)": {"tow_cap": 5000, "class": "Class III"},
+    "Half-Ton Truck (F-150, Silverado 1500, Ram 1500, Tundra)": {"tow_cap": 9500, "class": "Class IV"},
+    "Three-Quarter Ton Truck (F-250, 2500 HD)": {"tow_cap": 15000, "class": "Class V"},
+    "One-Ton Heavy Duty (F-350 / 3500 Single / Dually)": {"tow_cap": 24000, "class": "Heavy Commercial"},
+    "Commercial Medium Duty (F-450 / F-550 / Cab Chassis)": {"tow_cap": 35000, "class": "Commercial"}
 }
 
-/* ---- Chat input: give it a clearly-bordered, unmistakable "type here" box ---- */
-[data-testid="stChatInput"]{
-  border: 2px solid var(--aatc-navy) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 2px 10px rgba(11,26,51,0.15);
-}
-[data-testid="stChatInput"] textarea{ color: var(--aatc-ink) !important; }
+ALL_TRAILERS = load_live_catalog()
+ALL_ACCESSORIES = load_live_accessories()
 
-/* ---- Match result cards (CSS grid = automatic side-by-side comparison) ---- */
-.aatc-grid{
-  display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  gap:14px;
-  margin:12px 0 6px;
-}
-.aatc-card{
-  background: var(--aatc-white);
-  border: 1px solid var(--aatc-line);
-  border-top: 4px solid var(--aatc-navy);
-  border-radius: 12px;
-  padding: 14px 16px 16px;
-  box-shadow: 0 1px 4px rgba(11,26,51,0.08);
-  display:flex; flex-direction:column; gap:10px;
-}
-.aatc-card-head{ display:flex; align-items:center; gap:10px; }
-.aatc-card-icon{
-  flex-shrink:0; width:34px; height:34px; border-radius:8px;
-  background: var(--aatc-bg); color: var(--aatc-navy);
-  display:flex; align-items:center; justify-content:center;
-}
-.aatc-card-title{ font-weight:700; color: var(--aatc-ink); font-size:14px; }
-.aatc-card-name{ font-weight:500; color: var(--aatc-muted); }
-.aatc-card-meta{ font-size:12px; color: var(--aatc-muted); margin-top:1px; }
+if "step" not in st.session_state:
+    st.session_state.step = 1
+if "selected_trailer" not in st.session_state:
+    st.session_state.selected_trailer = None
 
-.aatc-capacity{ border-top:1px solid var(--aatc-line); padding-top:8px; }
-.aatc-capacity-label{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--aatc-muted); }
-.aatc-capacity-value{ font-size:19px; font-weight:700; color:var(--aatc-navy); }
-.aatc-capacity-margin{ font-size:12px; color: var(--aatc-good); font-weight:600; }
-
-.aatc-tow-checks{ border-top:1px solid var(--aatc-line); padding-top:8px; display:flex; flex-direction:column; gap:4px; }
-.aatc-status{ display:flex; justify-content:space-between; font-size:12.5px; }
-.aatc-status.ok{ color: var(--aatc-good); }
-.aatc-status.bad{ color: var(--aatc-bad); font-weight:600; }
-
-.aatc-card-link{
-  margin-top:2px; display:inline-block; text-align:center;
-  background: var(--aatc-navy); color: var(--aatc-white) !important;
-  font-size:12.5px; font-weight:600; text-decoration:none;
-  padding:8px 10px; border-radius:8px;
-}
-.aatc-card-link:hover{ background: var(--aatc-navy-2); }
-
-/* ---- Disclaimer banner -- amber/caution, deliberately distinct from the
-   brand navy/red so it doesn't get lost among the styled buttons ---- */
-.aatc-disclaimer{
-  background:#fff7ea; border:1px solid #f0c975; color:#6b4c14;
-  border-radius:10px; padding:10px 14px; font-size:12.5px; margin:4px 0 14px;
-  line-height:1.5;
-}
-.aatc-disclaimer b{ color:#4a3410; }
-"""
-st.markdown(f"<style>{AATC_CSS}</style>", unsafe_allow_html=True)
-
-HERO_HTML = """
-<div class="aatc-hero">
-  <p class="aatc-hero-title">ALL AMERICAN <span class="aatc-hero-star">&#9733;</span> <span class="aatc-hero-title-accent">TRAILER</span></p>
-  <p class="aatc-hero-sub">Spec &amp; Fit Assistant</p>
+# -----------------------------------------------------------------------------
+# HEADER & STEPPER
+# -----------------------------------------------------------------------------
+st.markdown("""
+<div class="wizard-header">
+    <div class="wizard-badge">AATC Live Salesforce Rig Builder</div>
+    <div class="wizard-title">Right-Size & Custom-Build Your Trailer</div>
+    <p class="wizard-sub">Find the exact right trailer matched to your truck, and customize it with commercial add-ons for a complete drive-away quote.</p>
 </div>
-"""
-st.markdown(HERO_HTML, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------------
-# Simple line-icon SVGs per trailer category. Hand-drawn, brand-tinted
-# (currentColor), fully self-contained -- no external/real trailer photos,
-# so nothing here can go stale or raise image-sourcing questions later.
-# ---------------------------------------------------------------------------
-_ICON_ATTRS = 'viewBox="0 0 32 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
+s1_cls = "step-done" if st.session_state.step > 1 else ("step-active" if st.session_state.step == 1 else "step-todo")
+s2_cls = "step-done" if st.session_state.step > 2 else ("step-active" if st.session_state.step == 2 else "step-todo")
+s3_cls = "step-done" if st.session_state.step > 3 else ("step-active" if st.session_state.step == 3 else "step-todo")
+s4_cls = "step-done" if st.session_state.step > 4 else ("step-active" if st.session_state.step == 4 else "step-todo")
+s5_cls = "step-active" if st.session_state.step == 5 else "step-todo"
 
-CATEGORY_ICONS = {
-    "dump": f'<svg {_ICON_ATTRS}><line x1="2" y1="18" x2="26" y2="18"/><polyline points="4,18 4,10 20,6 20,18"/><circle cx="8" cy="20.5" r="2"/><circle cx="22" cy="20.5" r="2"/></svg>',
-    "equipment": f'<svg {_ICON_ATTRS}><line x1="2" y1="14" x2="28" y2="14"/><line x1="2" y1="14" x2="4" y2="18"/><line x1="28" y1="14" x2="26" y2="18"/><circle cx="9" cy="19.5" r="2"/><circle cx="21" cy="19.5" r="2"/></svg>',
-    "carhauler": f'<svg {_ICON_ATTRS}><line x1="2" y1="16" x2="28" y2="16"/><path d="M8 16v-3.5c0-.8.7-1.5 1.5-1.5h9c.8 0 1.5.7 1.5 1.5V16"/><line x1="8" y1="13" x2="20" y2="13"/><circle cx="9" cy="19.5" r="2"/><circle cx="21" cy="19.5" r="2"/></svg>',
-    "utility": f'<svg {_ICON_ATTRS}><path d="M4 10h20v6H4z"/><line x1="4" y1="10" x2="4" y2="6"/><line x1="24" y1="10" x2="24" y2="6"/><circle cx="9" cy="19.5" r="2"/><circle cx="21" cy="19.5" r="2"/></svg>',
-    "cargo_enclosed": f'<svg {_ICON_ATTRS}><rect x="3" y="5" width="22" height="11" rx="1.5"/><line x1="20" y1="5" x2="20" y2="16"/><circle cx="9" cy="19.5" r="2"/><circle cx="21" cy="19.5" r="2"/></svg>',
-}
-DEFAULT_ICON = f'<svg {_ICON_ATTRS}><line x1="2" y1="15" x2="26" y2="15"/><line x1="2" y1="15" x2="2" y2="11"/><circle cx="9" cy="19.5" r="2"/><circle cx="21" cy="19.5" r="2"/></svg>'
+st.markdown(f"""
+<div class="step-bar">
+    <div class="step-node"><div class="step-circle {s1_cls}">1</div><span class="step-text">Tow Vehicle</span></div>
+    <div class="step-node"><div class="step-circle {s2_cls}">2</div><span class="step-text">Cargo & Weight</span></div>
+    <div class="step-node"><div class="step-circle {s3_cls}">3</div><span class="step-text">Style & Budget</span></div>
+    <div class="step-node"><div class="step-circle {s4_cls}">4</div><span class="step-text">Select Unit</span></div>
+    <div class="step-node"><div class="step-circle {s5_cls}">5</div><span class="step-text">Custom Add-Ons</span></div>
+</div>
+""", unsafe_allow_html=True)
 
-tab_qa, tab_match = st.tabs(["üí¨ Ask About Specs", "üîç Find My Trailer"])
+col_l, col_center, col_r = st.columns([1, 6, 1])
 
-with tab_qa:
-    st.caption(
-        "Ask about trailer specs, axle capacities, GVWR, and more. "
-        "Answers are grounded in the spec sheets -- if the info isn't there, "
-        "it'll say so instead of guessing."
-    )
-    st.markdown(
-        '<div class="aatc-disclaimer"><b>Demo notice:</b> Answers are generated '
-        "from spec-sheet excerpts and may be incomplete or out of date. Verify "
-        "critical specs directly with All American Trailer Connection or the "
-        "manufacturer before making a purchase or towing decision.</div>",
-        unsafe_allow_html=True,
-    )
+with col_center:
+    # STEP 1: Tow Vehicle
+    if st.session_state.step == 1:
+        st.markdown('<div class="question-card"><div class="card-heading">Step 1: What vehicle will be pulling this trailer?</div><div class="card-desc">Your tow vehicle rating sets the safety cap on total gross trailer weight (GVWR).</div></div>', unsafe_allow_html=True)
+        selected_veh = st.selectbox("Select Your Vehicle Class:", list(TOW_VEHICLES.keys()))
+        veh_data = TOW_VEHICLES[selected_veh]
+        st.info(f"?? **Estimated Towing Limit:** **{veh_data['tow_cap']:,} lbs** ({veh_data['class']})")
+        st.session_state.tow_vehicle = selected_veh
+        st.session_state.tow_cap = veh_data["tow_cap"]
+        if st.button("Continue to Cargo Selection ?", type="primary", use_container_width=True):
+            st.session_state.step = 2
+            st.rerun()
 
-    if "qa_messages" not in st.session_state:
-        st.session_state.qa_messages = []
-
-    for msg in st.session_state.qa_messages:
-        avatar = "üöõ" if msg["role"] == "assistant" else None
-        with st.chat_message(msg["role"], avatar=avatar):
-            st.markdown(msg["content"])
-
-    question = st.chat_input("Ask a question about trailer specs...", key="qa_input")
-
-    if question:
-        qa_user_turns = sum(1 for m in st.session_state.qa_messages if m["role"] == "user")
-
-        if len(question) > MAX_INPUT_CHARS:
-            _too_long_warning(question)
-        elif qa_user_turns >= MAX_QA_MESSAGES_PER_SESSION:
-            st.session_state.qa_messages.append({"role": "user", "content": question})
-            with st.chat_message("user"):
-                st.markdown(question)
-            with st.chat_message("assistant", avatar="üöõ"):
-                st.info(SESSION_LIMIT_MSG)
-            st.session_state.qa_messages.append({"role": "assistant", "content": SESSION_LIMIT_MSG})
+    # STEP 2: Cargo & Payload
+    elif st.session_state.step == 2:
+        st.markdown('<div class="question-card"><div class="card-heading">Step 2: What do you plan to haul?</div><div class="card-desc">Select a common cargo profile or type in the exact payload weight you need to carry.</div></div>', unsafe_allow_html=True)
+        preset = st.radio("Choose Primary Cargo Type:", list(CARGO_PRESETS.keys()))
+        if preset == "?? Custom Weight Entry":
+            payload_target = st.number_input("Enter exact cargo weight needed (lbs):", min_value=500, max_value=25000, value=5000, step=500)
         else:
-            st.session_state.qa_messages.append({"role": "user", "content": question})
-            with st.chat_message("user"):
-                st.markdown(question)
+            payload_target = CARGO_PRESETS[preset]
+            st.caption(f"Target payload calculated at **{payload_target:,} lbs**")
+        st.session_state.payload_target = payload_target
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("? Back"):
+                st.session_state.step = 1
+                st.rerun()
+        with c2:
+            if st.button("Continue to Style & Budget ?", type="primary", use_container_width=True):
+                st.session_state.step = 3
+                st.rerun()
 
-            with st.chat_message("assistant", avatar="üöõ"):
-                with st.spinner("Searching specs..."):
-                    result = ask(question)
-
-                st.markdown(result["answer"])
-
-                if not result["sufficient_information"]:
-                    st.warning(
-                        "The spec sheets don't have enough information to answer "
-                        "this confidently -- take this with a grain of salt."
-                    )
-
-                if result["sources"]:
-                    with st.expander("Sources"):
-                        for s in result["sources"]:
-                            st.markdown(f"- **{s['file']}**, page {s['page']}")
-
-            st.session_state.qa_messages.append({"role": "assistant", "content": result["answer"]})
-
-
-AATC_CATEGORY_URLS = {
-    "dump": "https://allamericantrailer.com/product-category/dump-trailer-inventory-for-sale/",
-    "tilt": "https://allamericantrailer.com/product-category/equipment-tilt/",
-    "deckover": "https://allamericantrailer.com/product-category/flat-bed/",
-    "carhauler": "https://allamericantrailer.com/product-category/open-car-hauler/",
-    "utility": "https://allamericantrailer.com/product-category/open-utility/",
-    "cargo_enclosed": "https://allamericantrailer.com/product-category/enclosed-cargo-car/",
-}
-
-SOURCE_TO_AATC_BRAND_URL = {
-    "pj_trailers_owners_manual-2.pdf": "https://allamericantrailer.com/shop/trailerbrand-pj/",
-    "pj_trailers_products_specs.pdf": "https://allamericantrailer.com/shop/trailerbrand-pj/",
-    "Diamond_C_GDT-brochure-12-05-2022.pdf": "https://allamericantrailer.com/shop/trailerbrand-diamond-c/",
-    "Diamond_C_LPX-brochure-12-05-2022-1.pdf": "https://allamericantrailer.com/shop/trailerbrand-diamond-c/",
-    "Big-Tex-Trailers_Owners-Manual_2020-Dump-Trailers-2.pdf": "https://allamericantrailer.com/shop/trailerbrand-big-tex/",
-    "Big-Tex-Trailers_Owners-Manual_2020.pdf": "https://allamericantrailer.com/shop/trailerbrand-big-tex/",
-    "Big-Tex-Trailers_plug-contacts.pdf": "https://allamericantrailer.com/shop/trailerbrand-big-tex/",
-    "Big-Tex-Trailers_wiring-diagram.pdf": "https://allamericantrailer.com/shop/trailerbrand-big-tex/",
-    "MAXX_D_trailer_specs_print_sheet_-_individual_d6x.pdf": "https://allamericantrailer.com/shop/trailerbrand-maxx-d/",
-    "MAXX_D_trailer_specs_print_sheet_-_individual_dhx.pdf": "https://allamericantrailer.com/shop/trailerbrand-maxx-d/",
-    "Covered_Wagon_WEBSITE_CARGO_6_WIDE.pdf": "https://allamericantrailer.com/shop/trailerbrand-covered-wagon/",
-}
-
-
-def get_aatc_link(m):
-    """
-    Prefer the exact real product page for this trailer -- product_url is
-    set directly from the live site scrape (scrape_catalog.py ->
-    normalize.py), so this links straight to the precise listing being
-    recommended rather than a same-category page. Falls back to a
-    category-specific AATC page, then the brand's general page, only for
-    matches that didn't come from the scraped catalog and so have no
-    product_url of their own (e.g. older PDF-derived data, or a 'pipe'
-    trailer -- not a category AATC carries a dedicated page for).
-    """
-    product_url = m.get("product_url")
-    if product_url:
-        return product_url, "listing"
-
-    category = m.get("category")
-    name = (m.get("model_name") or "").lower()
-
-    if category == "dump":
-        return AATC_CATEGORY_URLS["dump"], "dump trailer"
-    if category == "equipment":
-        if "tilt" in name:
-            return AATC_CATEGORY_URLS["tilt"], "equipment/tilt trailer"
-        return AATC_CATEGORY_URLS["deckover"], "flatbed/deckover trailer"
-    if category == "carhauler":
-        return AATC_CATEGORY_URLS["carhauler"], "car hauler"
-    if category == "utility":
-        return AATC_CATEGORY_URLS["utility"], "utility trailer"
-    if category == "cargo_enclosed":
-        return AATC_CATEGORY_URLS["cargo_enclosed"], "enclosed cargo trailer"
-
-    brand_url = SOURCE_TO_AATC_BRAND_URL.get(m.get("source"))
-    if brand_url:
-        return brand_url, "brand"
-    return None, None
-
-
-def _status_row(ok, label, margin):
-    icon = "‚úÖ" if ok else "‚ùå"
-    cls = "ok" if ok else "bad"
-    sign = "+" if margin >= 0 else ""
-    return (
-        f'<div class="aatc-status {cls}"><span>{icon} {html_lib.escape(label)}</span>'
-        f'<span>{sign}{margin:,.0f} lb</span></div>'
-    )
-
-
-def build_match_card_html(m):
-    # `or ""` rather than a .get() default -- real scraped listings can have
-    # model_code/source present in the dict but set to None (e.g. the
-    # "Custom Trailers" listing has no single model code and no listed
-    # Trailer Brand), and a plain default only kicks in when the key is
-    # missing entirely, not when it's there with a None value. Without this,
-    # a None renders as the literal text "None" in the card.
-    code = html_lib.escape(str(m.get("model_code") or ""))
-    name = html_lib.escape(str(m.get("model_name") or ""))
-    category = m.get("category") or "other"
-    cat_label = html_lib.escape(category.replace("_", " ").title())
-    icon_svg = CATEGORY_ICONS.get(category, DEFAULT_ICON)
-    source = html_lib.escape(str(m.get("source") or ""))
-    capacity = m.get("capacity_lb")
-    margin = m.get("margin_lb")
-
-    capacity_html = ""
-    if capacity is not None:
-        margin_html = ""
-        if margin is not None:
-            sign = "+" if margin >= 0 else ""
-            margin_html = f'<div class="aatc-capacity-margin">{sign}{margin:,.0f} lb margin</div>'
-        capacity_html = (
-            '<div class="aatc-capacity">'
-            '<div class="aatc-capacity-label">Capacity</div>'
-            f'<div class="aatc-capacity-value">{capacity:,.0f} lb</div>'
-            f'{margin_html}'
-            '</div>'
+    # STEP 3: Style & Budget Preferences
+    elif st.session_state.step == 3:
+        st.markdown('<div class="question-card"><div class="card-heading">Step 3: What trailer style & budget work best?</div><div class="card-desc">Select your preferred style and price range.</div></div>', unsafe_allow_html=True)
+        category_choice = st.selectbox(
+            "Preferred Trailer Category:",
+            ["All Compatible Styles (Recommended)", "Dump Trailer", "Equipment Trailer", "Tilt Trailer", "Utility Trailer", "Car Hauler", "Cargo Trailer / Enclosed", "Gooseneck Trailer"]
         )
-
-    tow_html = ""
-    tow_check = m.get("tow_check")
-    if tow_check:
-        rows = (
-            _status_row(tow_check["tow_rating_ok"], "Tow rating", tow_check["tow_rating_margin_lb"])
-            + _status_row(tow_check["gcwr_ok"], "GCWR", tow_check["gcwr_margin_lb"])
-            + _status_row(tow_check["tongue_ok"], "Tongue weight", tow_check["tongue_margin_lb"])
+        budget_choice = st.selectbox(
+            "Target Investment Range / Budget Tier:",
+            [
+                "Any Price Point / Explore All Tiers",
+                "Entry-Level / Utility Tier (Under $4,000)",
+                "Mid-Duty / Pro-Hauler Tier ($4,000 - $7,500)",
+                "Commercial Workhorse Tier ($7,500 - $12,000)",
+                "Heavy-Duty / High-Cap Tier ($12,000+)"
+            ]
         )
-        tow_html = f'<div class="aatc-tow-checks">{rows}</div>'
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("? Back"):
+                st.session_state.step = 2
+                st.rerun()
+        with c2:
+            if st.button("?? Find My Top Matches", type="primary", use_container_width=True):
+                st.session_state.step = 4
+                st.session_state.category_choice = category_choice
+                st.session_state.budget_choice = budget_choice
+                st.rerun()
 
-    link, link_kind = get_aatc_link(m)
-    link_html = ""
-    if link:
-        if link_kind == "listing":
-            label = "View this exact listing at AATC"
-        elif link_kind == "brand":
-            label = "See current inventory for this brand at AATC"
+    # STEP 4: Matching Units & Unit Selection
+    elif st.session_state.step == 4:
+        tow_cap = st.session_state.get("tow_cap", 10000)
+        tow_veh = st.session_state.get("tow_vehicle", "Standard Truck")
+        target_payload = st.session_state.get("payload_target", 2500)
+        pref_cat = st.session_state.get("category_choice", "All Compatible Styles (Recommended)")
+        initial_budget = st.session_state.get("budget_choice", "Any Price Point / Explore All Tiers")
+
+        def matches_cat(trailer_cat, user_pref):
+            if user_pref == "All Compatible Styles (Recommended)": return True
+            tc = trailer_cat.lower()
+            up = user_pref.lower()
+            if "dump" in up and "dump" in tc: return True
+            if "equipment" in up and "equipment" in tc: return True
+            if "tilt" in up and "tilt" in tc: return True
+            if "utility" in up and "util" in tc: return True
+            if "car" in up and ("car" in tc or "auto" in tc): return True
+            if "cargo" in up and ("cargo" in tc or "enclosed" in tc): return True
+            if "gooseneck" in up and "gooseneck" in tc: return True
+            return up in tc
+
+        raw_candidates = [t for t in ALL_TRAILERS if t["payload"] >= target_payload and matches_cat(t["category"], pref_cat)]
+
+        st.markdown(f"""
+        <div class="result-summary-box">
+            <h3 style="margin: 0 0 0.5rem 0; font-size: 1.5rem; color: #ffffff;">Fitment Analysis Summary</h3>
+            <p style="color: #94a3b8; margin-bottom: 1.25rem;">Based on your <strong>{tow_veh}</strong> ({tow_cap:,} lbs limit) and <strong>{target_payload:,} lbs</strong> target payload:</p>
+            <div style="display: flex; gap: 2.5rem; flex-wrap: wrap;">
+                <div><span style="font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; font-weight: 600;">Tow Rating Cap</span><br><strong style="font-size: 1.4rem; color: #ffffff;">{tow_cap:,} lbs</strong></div>
+                <div><span style="font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; font-weight: 600;">Target Payload</span><br><strong style="font-size: 1.4rem; color: #34d399;">{target_payload:,} lbs</strong></div>
+                <div><span style="font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; font-weight: 600;">Matching Units</span><br><strong style="font-size: 1.4rem; color: #60a5fa;">{len(raw_candidates)} In Stock</strong></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if not raw_candidates:
+            st.warning("No in-stock trailers match those criteria. Try adjusting your target weight or selecting another category.")
         else:
-            label = f"See current {link_kind} inventory at AATC"
-        link_html = f'<a class="aatc-card-link" href="{link}" target="_blank" rel="noopener">{html_lib.escape(label)} &rarr;</a>'
+            st.markdown("#### ?? Narrow Down & Sort Your Results")
+            c_use, c_budget, c_brand, c_sort = st.columns([3, 3, 2, 3])
+            
+            with c_use:
+                use_case = st.selectbox(
+                    "What are you primarily hauling?",
+                    ["Any / All Usages", "?? Vehicles, Cars & UTVs", "?? Weather-Protected Freight & Tools", "?? Dirt, Rock & Debris (Dump)", "?? Lawn, Farm & General Utility"]
+                )
 
-    # code/source can legitimately be empty (real example: the "Custom
-    # Trailers" listing has no single model code and no listed Trailer
-    # Brand) -- skip the leading code space / the middot separator rather
-    # than rendering "  Custom Trailers..." or "Carhauler &middot; ".
-    title_html = f'{code} <span class="aatc-card-name">{name}</span>' if code else f'<span class="aatc-card-name">{name}</span>'
-    meta_html = f'{cat_label} &middot; {source}' if source else cat_label
+            with c_budget:
+                budget_options = [
+                    "All Budget Tiers",
+                    "Under $4,000 (Entry/Utility)",
+                    "$4,000 - $7,500 (Mid-Range Pro)",
+                    "$7,500 - $12,000 (Commercial Workhorse)",
+                    "$12,000+ (Heavy Equipment / Tilt)"
+                ]
+                default_idx = 0
+                if "Under $4,000" in initial_budget: default_idx = 1
+                elif "$4,000 - $7,500" in initial_budget: default_idx = 2
+                elif "$7,500 - $12,000" in initial_budget: default_idx = 3
+                elif "$12,000+" in initial_budget: default_idx = 4
+                selected_tier = st.selectbox("Budget Bracket:", budget_options, index=default_idx)
 
-    # Built as one unbroken string with no blank lines anywhere in it.
-    # Streamlit's markdown renderer treats a blank line inside a raw <div>
-    # block as the end of that HTML block (CommonMark HTML-block rules) --
-    # that's what caused everything after the first blank line to show up
-    # as literal, unrendered HTML text instead of a styled card.
-    return (
-        '<div class="aatc-card">'
-        '<div class="aatc-card-head">'
-        f'<div class="aatc-card-icon">{icon_svg}</div>'
-        '<div>'
-        f'<div class="aatc-card-title">{title_html}</div>'
-        f'<div class="aatc-card-meta">{meta_html}</div>'
-        '</div>'
-        '</div>'
-        f'{capacity_html}'
-        f'{tow_html}'
-        f'{link_html}'
-        '</div>'
-    )
+            with c_brand:
+                available_brands = sorted(list({t["brand"] for t in raw_candidates if t["brand"]}))
+                filter_brand = st.selectbox("Brand:", ["All Brands"] + available_brands)
 
+            with c_sort:
+                sort_option = st.selectbox("Sort By:", [
+                    "?? Best Fit (Closest to Payload Target)",
+                    "?? Price: Low to High",
+                    "?? Price: High to Low",
+                    "?? Highest Payload Capacity",
+                    "?? Lightest Empty Weight",
+                    "??? Maximum Safety Margin"
+                ])
 
-def render_match_results(result):
-    matches = result.get("matches") or []
-    if not matches:
-        return
-    cards = "".join(build_match_card_html(m) for m in matches[:6])
-    st.markdown(f'<div class="aatc-grid">{cards}</div>', unsafe_allow_html=True)
+            filtered = []
+            for t in raw_candidates:
+                cat_lower = t["category"].lower()
+                name_lower = t["model_name"].lower()
+                price = t.get("price", 0.0)
 
+                if use_case == "?? Vehicles, Cars & UTVs" and not ("car" in cat_lower or "car" in name_lower or "auto" in cat_lower or "tilt" in cat_lower):
+                    continue
+                if use_case == "?? Weather-Protected Freight & Tools" and not ("cargo" in cat_lower or "enclosed" in cat_lower or "cargo" in name_lower):
+                    continue
+                if use_case == "?? Dirt, Rock & Debris (Dump)" and not ("dump" in cat_lower or "dump" in name_lower):
+                    continue
+                if use_case == "?? Lawn, Farm & General Utility" and not ("util" in cat_lower or "util" in name_lower or "equipment" in cat_lower):
+                    continue
+                if filter_brand != "All Brands" and t["brand"] != filter_brand:
+                    continue
 
-with tab_match:
-    st.caption(
-        "Tell me what you're hauling and what you're towing with, and I'll "
-        "find trailers that actually fit -- checked against real capacity "
-        "and tow-vehicle safety math, not a guess."
-    )
-    st.markdown(
-        '<div class="aatc-disclaimer"><b>Demo notice:</b> This tool is for '
-        "demonstration purposes. Trailer capacities are pulled from publicly "
-        "available spec sheets, and tow-vehicle figures are representative "
-        "example values &#8212; not a certified rating for your specific truck. "
-        "Always verify exact GVWR, GCWR, and tow-rating figures against your "
-        "vehicle&#39;s door-jamb sticker/owner&#39;s manual and the trailer&#39;s "
-        "official spec sheet, and consult a qualified professional before "
-        "towing. All American Trailer Connection is not responsible for "
-        "decisions made based on this tool.</div>",
-        unsafe_allow_html=True,
-    )
+                if price > 0:
+                    if selected_tier == "Under $4,000 (Entry/Utility)" and price >= 4000:
+                        continue
+                    elif selected_tier == "$4,000 - $7,500 (Mid-Range Pro)" and (price < 4000 or price >= 7500):
+                        continue
+                    elif selected_tier == "$7,500 - $12,000 (Commercial Workhorse)" and (price < 7500 or price >= 12000):
+                        continue
+                    elif selected_tier == "$12,000+ (Heavy Equipment / Tilt)" and price < 12000:
+                        continue
 
-    if "match_messages" not in st.session_state:
-        st.session_state.match_messages = []
-    if "match_results" not in st.session_state:
-        st.session_state.match_results = []
+                filtered.append(t)
 
-    if st.session_state.match_messages and st.button("Start Over", key="match_reset"):
-        st.session_state.match_messages = []
-        st.session_state.match_results = []
-        st.rerun()
+            if not filtered:
+                st.info("No exact units match that specific budget and use-case combination. Showing all compatible models:")
+                filtered = raw_candidates
 
-    for msg, result in zip(st.session_state.match_messages, st.session_state.match_results):
-        avatar = "üöõ" if msg["role"] == "assistant" else None
-        with st.chat_message(msg["role"], avatar=avatar):
-            st.markdown(msg["content"])
-            if result:
-                render_match_results(result)
+            if "Best Fit" in sort_option:
+                filtered.sort(key=lambda x: abs(x["payload"] - target_payload))
+            elif "Price: Low to High" in sort_option:
+                filtered.sort(key=lambda x: x["price"])
+            elif "Price: High to Low" in sort_option:
+                filtered.sort(key=lambda x: x["price"], reverse=True)
+            elif "Highest Payload" in sort_option:
+                filtered.sort(key=lambda x: x["payload"], reverse=True)
+            elif "Lightest Empty" in sort_option:
+                filtered.sort(key=lambda x: x["empty_weight"])
+            elif "Maximum Safety" in sort_option:
+                filtered.sort(key=lambda x: x["gvwr"])
 
-    load_question = st.chat_input("Describe what you need to haul...", key="match_input")
+            display_limit = 5
+            total_matches = len(filtered)
+            st.markdown(f"### ?? Top Recommended Matches ({min(display_limit, total_matches)} of {total_matches} units)")
+            st.caption("Click **'Select & Customize Build'** on any trailer to configure options, add accessories, and get an itemized quote.")
 
-    if load_question:
-        match_user_turns = sum(1 for m in st.session_state.match_messages if m["role"] == "user")
+            for idx, t in enumerate(filtered[:display_limit]):
+                margin = tow_cap - t["gvwr"]
+                badge_html = f'<span class="fit-badge fit-safe">? Safe Tow Match ({margin:,} lbs safety margin)</span>'
+                cond_badge = '<span style="background: #fef3c7; color: #92400e; font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; text-transform: uppercase;">Pre-Owned Deal</span>' if t.get("condition") == "Used" else '<span style="background: #eff6ff; color: #1d4ed8; font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; text-transform: uppercase;">New Unit</span>'
+                price_display = f"${t['price']:,.2f}" if t['price'] > 0 else "$5,495.00"
 
-        if len(load_question) > MAX_INPUT_CHARS:
-            _too_long_warning(load_question)
-        elif match_user_turns >= MAX_MATCH_MESSAGES_PER_SESSION:
-            st.session_state.match_messages.append({"role": "user", "content": load_question})
-            st.session_state.match_results.append(None)
-            with st.chat_message("user"):
-                st.markdown(load_question)
-            with st.chat_message("assistant", avatar="üöõ"):
-                st.info(SESSION_LIMIT_MSG)
-            st.session_state.match_messages.append({"role": "assistant", "content": SESSION_LIMIT_MSG})
-            st.session_state.match_results.append(None)
-        else:
-            st.session_state.match_messages.append({"role": "user", "content": load_question})
-            st.session_state.match_results.append(None)
-            with st.chat_message("user"):
-                st.markdown(load_question)
+                st.markdown(f"""
+                <div class="trailer-result-card">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+                        <div>
+                            {cond_badge}
+                            <span style="margin-left: 6px; background: #f8fafc; color: #0f172a; font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; border: 1px solid #cbd5e1; text-transform: uppercase;">{t['brand']}</span>
+                            <span style="margin-left: 6px; background: #f8fafc; color: #64748b; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0;">{t['category']}</span>
+                            <h3 style="margin: 8px 0 2px 0; font-size: 1.3rem; font-weight: 800; color: #0f172a;">{t['model_name']}</h3>
+                        </div>
+                        <div>{badge_html}</div>
+                    </div>
+                    <div class="spec-grid">
+                        <div class="spec-item"><span class="spec-label">Payload Capacity</span><span class="spec-val" style="color: #059669;">{t['payload']:,} lbs</span></div>
+                        <div class="spec-item"><span class="spec-label">Gross GVWR</span><span class="spec-val">{t['gvwr']:,} lbs</span></div>
+                        <div class="spec-item"><span class="spec-label">Estimated Empty</span><span class="spec-val">{t['empty_weight']:,} lbs</span></div>
+                        <div class="spec-item"><span class="spec-label">Deck / Length</span><span class="spec-val">{t['dimensions']}</span></div>
+                        <div class="spec-item"><span class="spec-label">Base Retail Price</span><span class="spec-val" style="color: #2563eb;">{price_display}</span></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            with st.chat_message("assistant", avatar="üöõ"):
-                with st.spinner("Thinking..."):
-                    reply, match_result = match_chat(st.session_state.match_messages)
-                st.markdown(reply)
-                if match_result:
-                    render_match_results(match_result)
+                col_b1, col_b2 = st.columns([3, 2])
+                with col_b1:
+                    if st.button(f"??? Select & Customize Build: {t['model_name'][:30]}...", key=f"sel_{idx}", type="primary", use_container_width=True):
+                        st.session_state.selected_trailer = t
+                        st.session_state.step = 5
+                        st.rerun()
+                with col_b2:
+                    st.link_button("View Live AATC Listing ?", t["url"], use_container_width=True)
 
-            st.session_state.match_messages.append({"role": "assistant", "content": reply})
-            st.session_state.match_results.append(match_result)
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("? Back / Change Fitment Specs"):
+                st.session_state.step = 3
+                st.rerun()
+
+    # STEP 5: Add-On Configurator & Full Build Quote (OPTION A + CUSTOM NOTES + DISCLAIMER)
+    elif st.session_state.step == 5:
+        trailer = st.session_state.get("selected_trailer")
+        if not trailer:
+            st.warning("No trailer currently selected. Returning to inventory.")
+            st.session_state.step = 4
+            st.rerun()
+
+        base_price = trailer.get("price", 5495.00)
+        cat_lower = trailer.get("category", "").lower()
+
+        st.markdown(f"""
+        <div class="build-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <span style="background: #eff6ff; color: #1d4ed8; font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; text-transform: uppercase;">Selected Base Unit</span>
+                    <h2 style="margin: 6px 0; color: #0f172a;">{trailer['brand']} {trailer['model_name']}</h2>
+                    <p style="color: #64748b; margin: 0;">GVWR: <strong>{trailer['gvwr']:,} lbs</strong> | Payload: <strong>{trailer['payload']:,} lbs</strong> | Deck / Length: <strong>{trailer['dimensions']}</strong></p>
+                </div>
+                <div style="text-align: right; margin-top: 8px;">
+                    <span style="font-size: 0.8rem; color: #64748b; font-weight: 600; text-transform: uppercase;">Base Unit Price</span><br>
+                    <strong style="font-size: 1.6rem; color: #0f172a;">${base_price:,.2f}</strong>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("### ?? Installed Equipment, Upgrades & Accessories")
+        st.caption("Pricing below reflects full turnkey installed packages including parts, mounting hardware, and dedicated technician labor hours.")
+
+        selected_addons = []
+
+        # Category-Specific Add-Ons
+        if "dump" in cat_lower:
+            dump_items = [a for a in ALL_ACCESSORIES if a["category"] == "Dump"]
+            if dump_items:
+                st.markdown('<div class="accessory-group"><h4>?? Verified Dump Trailer Add-Ons</h4>', unsafe_allow_html=True)
+                for idx, item in enumerate(dump_items):
+                    hrs = item.get("labor_hours", 1.0)
+                    label = f"{item['name']} ó **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
+                    if st.checkbox(label, key=f"dump_{idx}"):
+                        selected_addons.append(item)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        elif "cargo" in cat_lower or "enclosed" in cat_lower:
+            cargo_items = [a for a in ALL_ACCESSORIES if a["category"] == "Enclosed"]
+            if cargo_items:
+                st.markdown('<div class="accessory-group"><h4>?? Verified Enclosed Cargo Add-Ons</h4>', unsafe_allow_html=True)
+                for idx, item in enumerate(cargo_items):
+                    hrs = item.get("labor_hours", 1.0)
+                    label = f"{item['name']} ó **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
+                    if st.checkbox(label, key=f"cargo_{idx}"):
+                        selected_addons.append(item)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        elif "util" in cat_lower or "landscape" in cat_lower:
+            land_items = [a for a in ALL_ACCESSORIES if a["category"] == "Landscape"]
+            if land_items:
+                st.markdown('<div class="accessory-group"><h4>?? Verified Commercial Landscape Add-Ons</h4>', unsafe_allow_html=True)
+                for idx, item in enumerate(land_items):
+                    hrs = item.get("labor_hours", 0.5)
+                    label = f"{item['name']} ó **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
+                    if st.checkbox(label, key=f"land_{idx}"):
+                        selected_addons.append(item)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        # Universal Accessories
+        univ_items = [a for a in ALL_ACCESSORIES if a["category"] == "Universal"]
+        if univ_items:
+            st.markdown('<div class="accessory-group"><h4>??? Universal Straps, Winches & Road Essentials</h4>', unsafe_allow_html=True)
+            col_u1, col_u2 = st.columns(2)
+            half = (len(univ_items) + 1) // 2
+            with col_u1:
+                for idx, item in enumerate(univ_items[:half]):
+                    hrs = item.get("labor_hours", 0.5)
+                    label = f"{item['name']} ó **${item['price']:,.2f}** (~{hrs:.1f} hr)"
+                    if st.checkbox(label, key=f"univ1_{idx}"):
+                        selected_addons.append(item)
+            with col_u2:
+                for idx, item in enumerate(univ_items[half:]):
+                    hrs = item.get("labor_hours", 0.5)
+                    label = f"{item['name']} ó **${item['price']:,.2f}** (~{hrs:.1f} hr)"
+                    if st.checkbox(label, key=f"univ2_{idx}"):
+                        selected_addons.append(item)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # Custom Modification & Special Request Section
+        st.markdown('<div class="accessory-group">', unsafe_allow_html=True)
+        st.markdown("#### ?? Custom Equipment, Welding or Special Requests")
+        st.caption("Need specific D-ring placement, toolboxes, custom side extensions, or custom wiring? Detail your requested modifications below:")
+        custom_request_text = st.text_area(
+            "Custom Rigging & Fabrication Notes:",
+            placeholder="e.g. Please add 4 recessed D-rings welded at 4-foot intervals along the outer deck, and quote an aluminum tongue-mounted toolbox.",
+            height=90
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Totals Calculation
+        addon_total = sum(item["price"] for item in selected_addons)
+        total_labor_hours = sum(item.get("labor_hours", 0.0) for item in selected_addons)
+        grand_total = base_price + addon_total
+
+        st.markdown("---")
+        st.markdown(f"""
+        <div style="background: #f1f5f9; border-radius: 12px; padding: 1.5rem; margin: 1rem 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <h3 style="margin: 0; color: #0f172a;">Estimated Total Drive-Away Investment</h3>
+                    <p style="color: #64748b; margin: 4px 0 0 0;">
+                        Base Trailer: <strong>${base_price:,.2f}</strong> + {len(selected_addons)} Upgrades (<strong>${addon_total:,.2f}</strong>) | Total Shop Labor Included: <strong>~{total_labor_hours:.1f} hrs</strong>
+                    </p>
+                </div>
+                <div class="price-total-badge">
+                    ${grand_total:,.2f}
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Dealership Legal & Pricing Disclaimer
+        st.markdown("""
+        <div class="disclaimer-card">
+            <strong>?? AATC Pricing & Quotation Disclaimer:</strong><br>
+            All prices and equipment configurations are estimates based on live yard inventory and standard installation parameters. Quoted prices do not include applicable state sales tax, county surcharges, title, registration/tag transfer fees, electronic filing fees, or dealer pre-delivery service documentation charges. In-stock units are subject to prior sale. Installation turnaround times depend on shop scheduling and technician bay availability at time of contract execution.
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Lead Submission
+        st.markdown("### ?? Lock In Your Build Quote & Check Yard Availability")
+        st.caption("Submit your customized configuration to our sales desk. We'll hold the unit for 24 hours and verify installation scheduling.")
+        
+        c_name, c_phone, c_email = st.columns(3)
+        with c_name:
+            cust_name = st.text_input("Your Full Name *", placeholder="John Smith")
+        with c_phone:
+            cust_phone = st.text_input("Phone Number *", placeholder="(772) 555-0199")
+        with c_email:
+            cust_email = st.text_input("Email Address", placeholder="john@example.com")
+
+        col_back4, col_sub = st.columns([1, 2])
+        with col_back4:
+            if st.button("? Back to Matches"):
+                st.session_state.step = 4
+                st.rerun()
+        with col_sub:
+            if st.button("?? Lock In Quote & Send to Sales Desk", type="primary", use_container_width=True):
+                if not cust_name or not cust_phone:
+                    st.error("Please enter your name and phone number so the sales team can confirm your reservation.")
+                else:
+                    st.success(f"?? Thank you, {cust_name}! Your custom build quote for the **{trailer['brand']} {trailer['model_name']}** (${grand_total:,.2f}) has been logged.")
+                    if custom_request_text.strip():
+                        st.info(f"?? **Special Request Logged:** \"{custom_request_text.strip()}\" ó A technician will review this note prior to calling.")
+                    st.balloons()
