@@ -1,4 +1,4 @@
-import streamlit as st
+ï»¿import streamlit as st
 import json
 import os
 import re
@@ -15,6 +15,40 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+
+# -----------------------------------------------------------------------------
+# ACCESS CONTROL & GATEKEEPER
+# -----------------------------------------------------------------------------
+query_params = st.query_params
+embed_token = query_params.get("embed_auth")
+dealer_pin = st.secrets.get("access", {}).get("dealer_pin", "aatc2026")
+web_token = st.secrets.get("access", {}).get("embed_token", "aatc_live_embed_99")
+
+# Bypass authentication if coming from valid website embed token or authenticated session
+if "is_authenticated" not in st.session_state:
+    st.session_state.is_authenticated = False
+
+if embed_token == web_token:
+    st.session_state.is_authenticated = True
+
+if not st.session_state.is_authenticated:
+    st.markdown("""
+    <div style="max-width: 480px; margin: 5rem auto; background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); text-align: center; border: 1px solid #e2e8f0;">
+        <h3 style="margin-top:0; color: #0f172a;">ðŸ”’ AATC Staff & Partner Portal</h3>
+        <p style="color: #64748b; font-size: 0.9rem;">Direct access to this tool is restricted to authorized dealership personnel. For public customer access, visit our official inventory page.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col_k1, col_k2, col_k3 = st.columns([1, 2, 1])
+    with col_k2:
+        pin_input = st.text_input("Enter Dealership Access PIN:", type="password", placeholder="Enter PIN")
+        if st.button("Unlock Wizard", type="primary", use_container_width=True):
+            if pin_input == dealer_pin:
+                st.session_state.is_authenticated = True
+                st.rerun()
+            else:
+                st.error("Invalid Access PIN.")
+    st.stop()
 # -----------------------------------------------------------------------------
 # MODERN STYLING
 # -----------------------------------------------------------------------------
@@ -66,7 +100,7 @@ def clean_int(val, default=0):
     return default
 
 def sanitize_brakes(brakes_str, gvwr):
-    if not brakes_str or brakes_str.strip() in ["–", "-", "None", ""]:
+    if not brakes_str or brakes_str.strip() in ["ï¿½", "-", "None", ""]:
         return "Idler Axle (Non-Brake < 3K)" if gvwr <= 3000 else "Standard Electric Brakes"
     return brakes_str.strip()
 
@@ -172,7 +206,7 @@ def load_live_catalog():
     for fn in ["data/catalog_raw.json", "data/normalized_catalog.json"]:
         if os.path.exists(fn):
             try:
-                with open(fn, "r", encoding="utf-8") as f:
+                with open(fn, "r", encoding="utf-8", errors="replace") as f:
                     data = json.load(f)
                     standardized = []
                     for item in data:
@@ -595,7 +629,7 @@ with col_center:
                 st.markdown('<div class="accessory-group"><h4>?? Verified Dump Trailer Add-Ons</h4>', unsafe_allow_html=True)
                 for idx, item in enumerate(dump_items):
                     hrs = item.get("labor_hours", 1.0)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
+                    label = f"{item['name']} ï¿½ **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
                     if st.checkbox(label, key=f"dump_{idx}"):
                         selected_addons.append(item)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -606,7 +640,7 @@ with col_center:
                 st.markdown('<div class="accessory-group"><h4>?? Verified Enclosed Cargo Add-Ons</h4>', unsafe_allow_html=True)
                 for idx, item in enumerate(cargo_items):
                     hrs = item.get("labor_hours", 1.0)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
+                    label = f"{item['name']} ï¿½ **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
                     if st.checkbox(label, key=f"cargo_{idx}"):
                         selected_addons.append(item)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -617,7 +651,7 @@ with col_center:
                 st.markdown('<div class="accessory-group"><h4>?? Verified Commercial Landscape Add-Ons</h4>', unsafe_allow_html=True)
                 for idx, item in enumerate(land_items):
                     hrs = item.get("labor_hours", 0.5)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
+                    label = f"{item['name']} ï¿½ **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
                     if st.checkbox(label, key=f"land_{idx}"):
                         selected_addons.append(item)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -631,13 +665,13 @@ with col_center:
             with col_u1:
                 for idx, item in enumerate(univ_items[:half]):
                     hrs = item.get("labor_hours", 0.5)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (~{hrs:.1f} hr)"
+                    label = f"{item['name']} ï¿½ **${item['price']:,.2f}** (~{hrs:.1f} hr)"
                     if st.checkbox(label, key=f"univ1_{idx}"):
                         selected_addons.append(item)
             with col_u2:
                 for idx, item in enumerate(univ_items[half:]):
                     hrs = item.get("labor_hours", 0.5)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (~{hrs:.1f} hr)"
+                    label = f"{item['name']} ï¿½ **${item['price']:,.2f}** (~{hrs:.1f} hr)"
                     if st.checkbox(label, key=f"univ2_{idx}"):
                         selected_addons.append(item)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -707,5 +741,7 @@ with col_center:
                 else:
                     st.success(f"?? Thank you, {cust_name}! Your custom build quote for the **{trailer['brand']} {trailer['model_name']}** (${grand_total:,.2f}) has been logged.")
                     if custom_request_text.strip():
-                        st.info(f"?? **Special Request Logged:** \"{custom_request_text.strip()}\" — A technician will review this note prior to calling.")
+                        st.info(f"?? **Special Request Logged:** \"{custom_request_text.strip()}\" ï¿½ A technician will review this note prior to calling.")
                     st.balloons()
+
+
