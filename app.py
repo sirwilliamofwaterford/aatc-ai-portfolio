@@ -55,21 +55,21 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; color: #0f172a; }
-    .stApp { background-color: #f8fafc; }
-    .wizard-header { text-align: center; max-width: 780px; margin: 0 auto 2rem auto; padding-top: 1rem; }
-    .wizard-badge { display: inline-block; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 6px 14px; border-radius: 9999px; margin-bottom: 0.75rem; }
-    .wizard-title { font-size: 2.25rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem; letter-spacing: -0.5px; }
-    .wizard-sub { font-size: 1.05rem; color: #64748b; line-height: 1.5; }
-    .step-bar { display: flex; justify-content: space-between; max-width: 850px; margin: 0 auto 2.5rem auto; }
+    .stApp { background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%); }
+    .wizard-header { text-align: center; max-width: 800px; margin: 0 auto 2rem auto; padding-top: 1.5rem; }
+    .wizard-badge { display: inline-block; background: #dbeafe; border: 1px solid #93c5fd; color: #1e40af; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 6px 14px; border-radius: 9999px; margin-bottom: 0.75rem; }
+    .wizard-title { font-size: 2.35rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem; letter-spacing: -0.5px; }
+    .wizard-sub { font-size: 1.05rem; color: #475569; line-height: 1.5; }
+    .step-bar { display: flex; justify-content: space-between; max-width: 850px; margin: 0 auto 2.5rem auto; padding: 0.75rem 1.5rem; background: #ffffff; border-radius: 9999px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; }
     .step-node { display: flex; flex-direction: column; align-items: center; }
-    .step-circle { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; }
-    .step-active { background: #2563eb; color: #ffffff; box-shadow: 0 0 0 4px #dbeafe; }
+    .step-circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; }
+    .step-active { background: #1d4ed8; color: #ffffff; box-shadow: 0 0 0 4px #bfdbfe; }
     .step-done { background: #059669; color: #ffffff; }
-    .step-todo { background: #e2e8f0; color: #64748b; }
-    .step-text { font-size: 0.75rem; font-weight: 600; margin-top: 6px; color: #475569; }
-    .question-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03); }
-    .card-heading { font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 0.25rem; }
-    .card-desc { font-size: 0.9rem; color: #64748b; margin-bottom: 1.25rem; }
+    .step-todo { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
+    .step-text { font-size: 0.75rem; font-weight: 600; margin-top: 5px; color: #334155; }
+    .step-header-banner { border-left: 5px solid #2563eb; padding-left: 1.25rem; margin-bottom: 1.5rem; }
+    .step-banner-title { font-size: 1.5rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem 0; }
+    .step-banner-sub { font-size: 0.95rem; color: #475569; margin: 0; }
     .result-summary-box { background: linear-gradient(135deg, #091e3a 0%, #1e293b 100%); color: white; border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25); }
     .trailer-result-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.75rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04); transition: transform 0.2s ease; }
     .trailer-result-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.08); }
@@ -351,7 +351,7 @@ col_l, col_center, col_r = st.columns([1, 6, 1])
 with col_center:
     # STEP 1: Tow Vehicle
     if st.session_state.step == 1:
-        st.markdown('<div class="question-card"><div class="card-heading">Step 1: What vehicle will be pulling this trailer?</div><div class="card-desc">Your tow vehicle rating sets the safety cap on total gross trailer weight (GVWR).</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="step-header-banner"><div class="step-banner-title">Step 1: Select Your Tow Vehicle</div><div class="step-banner-sub">Your vehicle rating determines the safe gross trailer weight (GVWR) limit.</div></div>', unsafe_allow_html=True)
         selected_veh = st.selectbox("Select Your Vehicle Class:", list(TOW_VEHICLES.keys()))
         veh_data = TOW_VEHICLES[selected_veh]
         st.info(f"💡 **Estimated Towing Limit:** **{veh_data['tow_cap']:,} lbs** ({veh_data['class']})")
@@ -363,7 +363,7 @@ with col_center:
 
     # STEP 2: Cargo & Payload
     elif st.session_state.step == 2:
-        st.markdown('<div class="question-card"><div class="card-heading">Step 2: What do you plan to haul?</div><div class="card-desc">Select a common cargo profile or type in the exact payload weight you need to carry.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="step-header-banner"><div class="step-banner-title">Step 2: What do you plan to haul?</div><div class="step-banner-sub">Select your typical payload profile or enter an exact cargo requirement.</div></div>', unsafe_allow_html=True)
         preset = st.radio("Choose Primary Cargo Type:", list(CARGO_PRESETS.keys()))
         if preset == "⚙️ Custom Weight Entry":
             payload_target = st.number_input("Enter exact cargo weight needed (lbs):", min_value=500, max_value=25000, value=5000, step=500)
@@ -383,7 +383,7 @@ with col_center:
 
     # STEP 3: Style & Budget Preferences
     elif st.session_state.step == 3:
-        st.markdown('<div class="question-card"><div class="card-heading">Step 3: What trailer style & budget work best?</div><div class="card-desc">Select your preferred style and price range.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="step-header-banner"><div class="step-banner-title">Step 3: Style & Budget Preferences</div><div class="step-banner-sub">Pick your preferred trailer configuration and target investment tier.</div></div>', unsafe_allow_html=True)
         category_choice = st.selectbox(
             "Preferred Trailer Category:",
             ["All Compatible Styles (Recommended)", "Dump Trailer", "Equipment Trailer", "Tilt Trailer", "Utility Trailer", "Car Hauler", "Cargo Trailer / Enclosed", "Gooseneck Trailer"]
