@@ -169,19 +169,23 @@ def load_live_catalog():
                     retail_price = float(r.get("UnitPrice") or 0.0)
 
                     # Route by SKU or fall back to main category archive
-                    clean_sku = sku.strip() if sku else ""
-                    if clean_sku:
-                        url = f"https://allamericantrailer.com/?s={urllib.parse.quote_plus(clean_sku)}"
-                    else:
-                        fam_low = family.lower()
-                        if "dump" in fam_low:
-                            url = "https://allamericantrailer.com/product-category/dump-trailers/"
-                        elif "util" in fam_low:
-                            url = "https://allamericantrailer.com/product-category/utility-trailers/"
-                        elif "cargo" in fam_low or "enclosed" in fam_low:
-                            url = "https://allamericantrailer.com/product-category/cargo-trailers/"
-                        else:
-                            url = "https://allamericantrailer.com/shop/"
+                    # Match exact product page from local catalog
+                    url = "https://allamericantrailer.com/shop/"
+                    if os.path.exists("data/catalog_raw.json"):
+                        try:
+                            with open("data/catalog_raw.json", "r", encoding="utf-8", errors="replace") as f_cat:
+                                cat_data = json.load(f_cat)
+                                s_clean = sku.replace("-BK", "").strip().lower() if sku else ""
+                                t_clean = title.strip().lower() if title else ""
+                                for item in cat_data:
+                                    it_title = str(item.get("title") or item.get("name") or "").lower()
+                                    if (s_clean and s_clean in it_title) or (t_clean and t_clean in it_title):
+                                        direct_url = item.get("url") or item.get("product_url")
+                                        if direct_url:
+                                            url = direct_url
+                                            break
+                        except Exception:
+                            pass
 
                     standardized.append({
                         "id": p.get("Id"),
