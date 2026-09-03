@@ -168,8 +168,20 @@ def load_live_catalog():
                     sku = p.get("SKU_Model__c") or p.get("StockKeepingUnit") or ""
                     retail_price = float(r.get("UnitPrice") or 0.0)
 
-                    search_terms = urllib.parse.quote_plus(f"{brand} {sku}".strip())
-                    url = f"https://allamericantrailer.com/?s={search_terms}&post_type=product"
+                    # Route by SKU or fall back to main category archive
+                    clean_sku = sku.strip() if sku else ""
+                    if clean_sku:
+                        url = f"https://allamericantrailer.com/?s={urllib.parse.quote_plus(clean_sku)}"
+                    else:
+                        fam_low = family.lower()
+                        if "dump" in fam_low:
+                            url = "https://allamericantrailer.com/product-category/dump-trailers/"
+                        elif "util" in fam_low:
+                            url = "https://allamericantrailer.com/product-category/utility-trailers/"
+                        elif "cargo" in fam_low or "enclosed" in fam_low:
+                            url = "https://allamericantrailer.com/product-category/cargo-trailers/"
+                        else:
+                            url = "https://allamericantrailer.com/shop/"
 
                     standardized.append({
                         "id": p.get("Id"),
