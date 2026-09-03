@@ -10,11 +10,10 @@ from simple_salesforce import Salesforce
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="AATC Trailer Configurator & Quote Builder",
-    page_icon="??",
+    page_icon="🚛",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
 
 # -----------------------------------------------------------------------------
 # ACCESS CONTROL & GATEKEEPER
@@ -24,7 +23,6 @@ embed_token = query_params.get("embed_auth")
 dealer_pin = st.secrets.get("access", {}).get("dealer_pin", "aatc2026")
 web_token = st.secrets.get("access", {}).get("embed_token", "aatc_live_embed_99")
 
-# Bypass authentication if coming from valid website embed token or authenticated session
 if "is_authenticated" not in st.session_state:
     st.session_state.is_authenticated = False
 
@@ -49,6 +47,7 @@ if not st.session_state.is_authenticated:
             else:
                 st.error("Invalid Access PIN.")
     st.stop()
+
 # -----------------------------------------------------------------------------
 # MODERN STYLING
 # -----------------------------------------------------------------------------
@@ -84,7 +83,6 @@ st.markdown("""
     .build-box { background: #ffffff; border: 2px solid #2563eb; border-radius: 14px; padding: 1.75rem; margin-bottom: 1.5rem; }
     .price-total-badge { background: #059669; color: white; padding: 6px 14px; border-radius: 8px; font-size: 1.3rem; font-weight: 800; }
     .accessory-group { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; }
-    .labor-tag { display: inline-block; background: #f0fdf4; color: #166534; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; border: 1px solid #bbf7d0; margin-left: 6px; }
     .disclaimer-card { background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #64748b; border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; font-size: 0.8rem; color: #475569; line-height: 1.5; }
 </style>
 """, unsafe_allow_html=True)
@@ -100,12 +98,11 @@ def clean_int(val, default=0):
     return default
 
 def sanitize_brakes(brakes_str, gvwr):
-    if not brakes_str or brakes_str.strip() in ["�", "-", "None", ""]:
+    if not brakes_str or brakes_str.strip() in ["–", "-", "None", ""]:
         return "Idler Axle (Non-Brake < 3K)" if gvwr <= 3000 else "Standard Electric Brakes"
     return brakes_str.strip()
 
 def get_labor_hours(item_name):
-    """Estimates technician flat-rate shop hours based on installation task."""
     name_u = item_name.upper()
     if "TARP" in name_u:
         return 1.0
@@ -129,25 +126,16 @@ def get_labor_hours(item_name):
 @st.cache_resource
 def get_salesforce_connection():
     try:
-        # test_sf removed for cloud deploy
-        return Salesforce(
-            username=test_sf.SF_USERNAME,
-            password=test_sf.SF_PASSWORD,
-            security_token=test_sf.SF_SECURITY_TOKEN,
-            domain=test_sf.SF_DOMAIN
-        )
+        sf_sec = st.secrets.get("salesforce", {})
+        if sf_sec.get("username"):
+            return Salesforce(
+                username=sf_sec["username"],
+                password=sf_sec["password"],
+                security_token=sf_sec["security_token"],
+                domain=sf_sec.get("domain", "login")
+            )
     except Exception:
-        try:
-            sf_sec = st.secrets.get("salesforce", {})
-            if sf_sec.get("username"):
-                return Salesforce(
-                    username=sf_sec["username"],
-                    password=sf_sec["password"],
-                    security_token=sf_sec["security_token"],
-                    domain=sf_sec.get("domain", "login")
-                )
-        except Exception:
-            pass
+        pass
     return None
 
 @st.cache_data(ttl=600)
@@ -180,7 +168,8 @@ def load_live_catalog():
                     sku = p.get("SKU_Model__c") or p.get("StockKeepingUnit") or ""
                     retail_price = float(r.get("UnitPrice") or 0.0)
 
-                    search_terms = urllib.parse.quote_plus(f"{brand} {sku}".strip())`n                    url = f"https://allamericantrailer.com/?s={search_terms}&post_type=product"
+                    search_terms = urllib.parse.quote_plus(f"{brand} {sku}".strip())
+                    url = f"https://allamericantrailer.com/?s={search_terms}&post_type=product"
 
                     standardized.append({
                         "id": p.get("Id"),
@@ -202,47 +191,46 @@ def load_live_catalog():
         except Exception:
             pass
 
-    # Fallback catalog
     for fn in ["data/catalog_raw.json", "data/normalized_catalog.json"]:
         if os.path.exists(fn):
-            try:
-                with open(fn, "r", encoding="utf-8", errors="replace") as f:
-                    data = json.load(f)
-                    standardized = []
-                    for item in data:
-                        title = str(item.get("title") or item.get("name") or "")
-                        url = str(item.get("url") or item.get("product_url") or "https://allamericantrailer.com")
-                        add_info = item.get("additional_information", {})
-                        specs = item.get("specifications", {})
-                        brand = str(item.get("brand") or add_info.get("Trailer Brand") or "AATC Stock").strip()
-                        category = str(item.get("category") or add_info.get("Trailer Type") or "Equipment").strip()
-                        gvwr = clean_int(add_info.get("GVWR") or specs.get("G.V.W.R."), default=0)
-                        payload = clean_int(add_info.get("Load Capacity"), default=0)
-                        empty = gvwr - payload if (gvwr > 0 and payload > 0) else int(gvwr * 0.28)
-                        if "truck bed" in title.lower() or "bin only" in title.lower() or gvwr < 2000:
-                            continue
-                        standardized.append({
-                            "brand": brand,
-                            "model_name": title,
-                            "category": category,
-                            "condition": "New",
-                            "gvwr": gvwr,
-                            "payload": payload,
-                            "empty_weight": empty,
-                            "dimensions": add_info.get("Length") or "Standard Length",
-                            "axles": sanitize_brakes(add_info.get("Brake Type"), gvwr),
-                            "price": 5495.00,
-                            "in_stock": 1,
-                            "url": url
-                        })
-                    return standardized
-            except Exception:
-                pass
+            for enc in ["utf-8", "cp1252", "latin-1"]:
+                try:
+                    with open(fn, "r", encoding=enc, errors="replace") as f:
+                        data = json.load(f)
+                        standardized = []
+                        for item in data:
+                            title = str(item.get("title") or item.get("name") or "")
+                            url = str(item.get("url") or item.get("product_url") or "https://allamericantrailer.com")
+                            add_info = item.get("additional_information", {})
+                            specs = item.get("specifications", {})
+                            brand = str(item.get("brand") or add_info.get("Trailer Brand") or "AATC Stock").strip()
+                            category = str(item.get("category") or add_info.get("Trailer Type") or "Equipment").strip()
+                            gvwr = clean_int(add_info.get("GVWR") or specs.get("G.V.W.R."), default=0)
+                            payload = clean_int(add_info.get("Load Capacity"), default=0)
+                            empty = gvwr - payload if (gvwr > 0 and payload > 0) else int(gvwr * 0.28)
+                            if "truck bed" in title.lower() or "bin only" in title.lower() or gvwr < 2000:
+                                continue
+                            standardized.append({
+                                "brand": brand,
+                                "model_name": title,
+                                "category": category,
+                                "condition": "New",
+                                "gvwr": gvwr,
+                                "payload": payload,
+                                "empty_weight": empty,
+                                "dimensions": add_info.get("Length") or "Standard Length",
+                                "axles": sanitize_brakes(add_info.get("Brake Type"), gvwr),
+                                "price": 5495.00,
+                                "in_stock": 1,
+                                "url": url
+                            })
+                        return standardized
+                except Exception:
+                    continue
     return []
 
 @st.cache_data(ttl=600)
 def load_live_accessories():
-    """Queries active parts and installed accessories from PricebookEntry."""
     sf = get_salesforce_connection()
     if sf:
         try:
@@ -307,12 +295,12 @@ def load_live_accessories():
 # CONSTANTS & CONFIGS
 # -----------------------------------------------------------------------------
 CARGO_PRESETS = {
-    "?🚜 Compact Tractor / Mowers (Under 3,500 lbs)": 3500,
-    "?🚗 Car / Small SUV / Light Equipment (4,000 - 6,000 lbs)": 5500,
-    "?🚧 Skid Steer / Mini Excavator (7,500 - 10,000 lbs)": 9000,
-    "?🪨 Heavy Equipment / Full Dump Load (11,000 - 16,000 lbs)": 14000,
-    "?📦 General Cargo / Moving / Landscaping (1,500 - 3,500 lbs)": 2500,
-    "?⚙️ Custom Weight Entry": 0
+    "🚜 Compact Tractor / Mowers (Under 3,500 lbs)": 3500,
+    "🚗 Car / Small SUV / Light Equipment (4,000 - 6,000 lbs)": 5500,
+    "🚧 Skid Steer / Mini Excavator (7,500 - 10,000 lbs)": 9000,
+    "🪨 Heavy Equipment / Full Dump Load (11,000 - 16,000 lbs)": 14000,
+    "📦 General Cargo / Moving / Landscaping (1,500 - 3,500 lbs)": 2500,
+    "⚙️ Custom Weight Entry": 0
 }
 
 TOW_VEHICLES = {
@@ -366,10 +354,10 @@ with col_center:
         st.markdown('<div class="question-card"><div class="card-heading">Step 1: What vehicle will be pulling this trailer?</div><div class="card-desc">Your tow vehicle rating sets the safety cap on total gross trailer weight (GVWR).</div></div>', unsafe_allow_html=True)
         selected_veh = st.selectbox("Select Your Vehicle Class:", list(TOW_VEHICLES.keys()))
         veh_data = TOW_VEHICLES[selected_veh]
-        st.info(f"?? **Estimated Towing Limit:** **{veh_data['tow_cap']:,} lbs** ({veh_data['class']})")
+        st.info(f"💡 **Estimated Towing Limit:** **{veh_data['tow_cap']:,} lbs** ({veh_data['class']})")
         st.session_state.tow_vehicle = selected_veh
         st.session_state.tow_cap = veh_data["tow_cap"]
-        if st.button("Continue to Cargo Selection ?", type="primary", use_container_width=True):
+        if st.button("Continue to Cargo Selection ➔", type="primary", use_container_width=True):
             st.session_state.step = 2
             st.rerun()
 
@@ -377,7 +365,7 @@ with col_center:
     elif st.session_state.step == 2:
         st.markdown('<div class="question-card"><div class="card-heading">Step 2: What do you plan to haul?</div><div class="card-desc">Select a common cargo profile or type in the exact payload weight you need to carry.</div></div>', unsafe_allow_html=True)
         preset = st.radio("Choose Primary Cargo Type:", list(CARGO_PRESETS.keys()))
-        if preset == "?⚙️ Custom Weight Entry":
+        if preset == "⚙️ Custom Weight Entry":
             payload_target = st.number_input("Enter exact cargo weight needed (lbs):", min_value=500, max_value=25000, value=5000, step=500)
         else:
             payload_target = CARGO_PRESETS[preset]
@@ -385,11 +373,11 @@ with col_center:
         st.session_state.payload_target = payload_target
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("? Back"):
+            if st.button("⬅ Back"):
                 st.session_state.step = 1
                 st.rerun()
         with c2:
-            if st.button("Continue to Style & Budget ?", type="primary", use_container_width=True):
+            if st.button("Continue to Style & Budget ➔", type="primary", use_container_width=True):
                 st.session_state.step = 3
                 st.rerun()
 
@@ -412,11 +400,11 @@ with col_center:
         )
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("? Back"):
+            if st.button("⬅ Back"):
                 st.session_state.step = 2
                 st.rerun()
         with c2:
-            if st.button("?🎯 Find My Top Matches", type="primary", use_container_width=True):
+            if st.button("🎯 Find My Top Matches", type="primary", use_container_width=True):
                 st.session_state.step = 4
                 st.session_state.category_choice = category_choice
                 st.session_state.budget_choice = budget_choice
@@ -460,13 +448,13 @@ with col_center:
         if not raw_candidates:
             st.warning("No in-stock trailers match those criteria. Try adjusting your target weight or selecting another category.")
         else:
-            st.markdown("#### ?🔍 Narrow Down & Sort Your Results")
+            st.markdown("#### 🔍 Narrow Down & Sort Your Results")
             c_use, c_budget, c_brand, c_sort = st.columns([3, 3, 2, 3])
             
             with c_use:
                 use_case = st.selectbox(
                     "What are you primarily hauling?",
-                    ["Any / All Usages", "?🚗 Vehicles, Cars & UTVs", "?📦 Weather-Protected Freight & Tools", "?🪨 Dirt, Rock & Debris (Dump)", "?🚜 Lawn, Farm & General Utility"]
+                    ["Any / All Usages", "🚗 Vehicles, Cars & UTVs", "📦 Weather-Protected Freight & Tools", "🪨 Dirt, Rock & Debris (Dump)", "🚜 Lawn, Farm & General Utility"]
                 )
 
             with c_budget:
@@ -490,12 +478,12 @@ with col_center:
 
             with c_sort:
                 sort_option = st.selectbox("Sort By:", [
-                    "?🎯 Best Fit (Closest to Payload Target)",
-                    "?💵 Price: Low to High",
-                    "?💎 Price: High to Low",
-                    "?💪 Highest Payload Capacity",
-                    "?🪶 Lightest Empty Weight",
-                    "??🛡️ Maximum Safety Margin"
+                    "🎯 Best Fit (Closest to Payload Target)",
+                    "💵 Price: Low to High",
+                    "💎 Price: High to Low",
+                    "💪 Highest Payload Capacity",
+                    "🪶 Lightest Empty Weight",
+                    "🛡️ Maximum Safety Margin"
                 ])
 
             filtered = []
@@ -504,13 +492,13 @@ with col_center:
                 name_lower = t["model_name"].lower()
                 price = t.get("price", 0.0)
 
-                if use_case == "?🚗 Vehicles, Cars & UTVs" and not ("car" in cat_lower or "car" in name_lower or "auto" in cat_lower or "tilt" in cat_lower):
+                if use_case == "🚗 Vehicles, Cars & UTVs" and not ("car" in cat_lower or "car" in name_lower or "auto" in cat_lower or "tilt" in cat_lower):
                     continue
-                if use_case == "?📦 Weather-Protected Freight & Tools" and not ("cargo" in cat_lower or "enclosed" in cat_lower or "cargo" in name_lower):
+                if use_case == "📦 Weather-Protected Freight & Tools" and not ("cargo" in cat_lower or "enclosed" in cat_lower or "cargo" in name_lower):
                     continue
-                if use_case == "?🪨 Dirt, Rock & Debris (Dump)" and not ("dump" in cat_lower or "dump" in name_lower):
+                if use_case == "🪨 Dirt, Rock & Debris (Dump)" and not ("dump" in cat_lower or "dump" in name_lower):
                     continue
-                if use_case == "?🚜 Lawn, Farm & General Utility" and not ("util" in cat_lower or "util" in name_lower or "equipment" in cat_lower):
+                if use_case == "🚜 Lawn, Farm & General Utility" and not ("util" in cat_lower or "util" in name_lower or "equipment" in cat_lower):
                     continue
                 if filter_brand != "All Brands" and t["brand"] != filter_brand:
                     continue
@@ -546,12 +534,12 @@ with col_center:
 
             display_limit = 5
             total_matches = len(filtered)
-            st.markdown(f"### ?🎯 Top Recommended Matches ({min(display_limit, total_matches)} of {total_matches} units)")
+            st.markdown(f"### 🎯 Top Recommended Matches ({min(display_limit, total_matches)} of {total_matches} units)")
             st.caption("Click **'Select & Customize Build'** on any trailer to configure options, add accessories, and get an itemized quote.")
 
             for idx, t in enumerate(filtered[:display_limit]):
                 margin = tow_cap - t["gvwr"]
-                badge_html = f'<span class="fit-badge fit-safe">? Safe Tow Match ({margin:,} lbs safety margin)</span>'
+                badge_html = f'<span class="fit-badge fit-safe">✓ Safe Tow Match ({margin:,} lbs safety margin)</span>'
                 cond_badge = '<span style="background: #fef3c7; color: #92400e; font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; text-transform: uppercase;">Pre-Owned Deal</span>' if t.get("condition") == "Used" else '<span style="background: #eff6ff; color: #1d4ed8; font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; text-transform: uppercase;">New Unit</span>'
                 price_display = f"${t['price']:,.2f}" if t['price'] > 0 else "$5,495.00"
 
@@ -578,19 +566,19 @@ with col_center:
 
                 col_b1, col_b2 = st.columns([3, 2])
                 with col_b1:
-                    if st.button(f"??🛠️ Select & Customize Build: {t['model_name'][:30]}...", key=f"sel_{idx}", type="primary", use_container_width=True):
+                    if st.button(f"🛠️ Select & Customize Build: {t['model_name'][:30]}...", key=f"sel_{idx}", type="primary", use_container_width=True):
                         st.session_state.selected_trailer = t
                         st.session_state.step = 5
                         st.rerun()
                 with col_b2:
-                    st.link_button("View Live AATC Listing ?", t["url"], use_container_width=True)
+                    st.link_button("View Live AATC Listing ➔", t["url"], use_container_width=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("? Back / Change Fitment Specs"):
+            if st.button("⬅ Back / Change Fitment Specs"):
                 st.session_state.step = 3
                 st.rerun()
 
-    # STEP 5: Add-On Configurator & Full Build Quote (OPTION A + CUSTOM NOTES + DISCLAIMER)
+    # STEP 5: Add-On Configurator & Full Build Quote
     elif st.session_state.step == 5:
         trailer = st.session_state.get("selected_trailer")
         if not trailer:
@@ -617,19 +605,18 @@ with col_center:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### ?🔧 Installed Equipment, Upgrades & Accessories")
+        st.markdown("### 🔧 Installed Equipment, Upgrades & Accessories")
         st.caption("Pricing below reflects full turnkey installed packages including parts, mounting hardware, and dedicated technician labor hours.")
 
         selected_addons = []
 
-        # Category-Specific Add-Ons
         if "dump" in cat_lower:
             dump_items = [a for a in ALL_ACCESSORIES if a["category"] == "Dump"]
             if dump_items:
-                st.markdown('<div class="accessory-group"><h4>?🪨 Verified Dump Trailer Add-Ons</h4>', unsafe_allow_html=True)
+                st.markdown('<div class="accessory-group"><h4>🪨 Verified Dump Trailer Add-Ons</h4>', unsafe_allow_html=True)
                 for idx, item in enumerate(dump_items):
                     hrs = item.get("labor_hours", 1.0)
-                    label = f"{item['name']} � **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
+                    label = f"{item['name']} — **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
                     if st.checkbox(label, key=f"dump_{idx}"):
                         selected_addons.append(item)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -637,10 +624,10 @@ with col_center:
         elif "cargo" in cat_lower or "enclosed" in cat_lower:
             cargo_items = [a for a in ALL_ACCESSORIES if a["category"] == "Enclosed"]
             if cargo_items:
-                st.markdown('<div class="accessory-group"><h4>?📦 Verified Enclosed Cargo Add-Ons</h4>', unsafe_allow_html=True)
+                st.markdown('<div class="accessory-group"><h4>📦 Verified Enclosed Cargo Add-Ons</h4>', unsafe_allow_html=True)
                 for idx, item in enumerate(cargo_items):
                     hrs = item.get("labor_hours", 1.0)
-                    label = f"{item['name']} � **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
+                    label = f"{item['name']} — **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
                     if st.checkbox(label, key=f"cargo_{idx}"):
                         selected_addons.append(item)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -648,37 +635,35 @@ with col_center:
         elif "util" in cat_lower or "landscape" in cat_lower:
             land_items = [a for a in ALL_ACCESSORIES if a["category"] == "Landscape"]
             if land_items:
-                st.markdown('<div class="accessory-group"><h4>?🌿 Verified Commercial Landscape Add-Ons</h4>', unsafe_allow_html=True)
+                st.markdown('<div class="accessory-group"><h4>🌿 Verified Commercial Landscape Add-Ons</h4>', unsafe_allow_html=True)
                 for idx, item in enumerate(land_items):
                     hrs = item.get("labor_hours", 0.5)
-                    label = f"{item['name']} � **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
+                    label = f"{item['name']} — **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
                     if st.checkbox(label, key=f"land_{idx}"):
                         selected_addons.append(item)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # Universal Accessories
         univ_items = [a for a in ALL_ACCESSORIES if a["category"] == "Universal"]
         if univ_items:
-            st.markdown('<div class="accessory-group"><h4>??🛡️ Universal Straps, Winches & Road Essentials</h4>', unsafe_allow_html=True)
+            st.markdown('<div class="accessory-group"><h4>🛡️ Universal Straps, Winches & Road Essentials</h4>', unsafe_allow_html=True)
             col_u1, col_u2 = st.columns(2)
             half = (len(univ_items) + 1) // 2
             with col_u1:
                 for idx, item in enumerate(univ_items[:half]):
                     hrs = item.get("labor_hours", 0.5)
-                    label = f"{item['name']} � **${item['price']:,.2f}** (~{hrs:.1f} hr)"
+                    label = f"{item['name']} — **${item['price']:,.2f}** (~{hrs:.1f} hr)"
                     if st.checkbox(label, key=f"univ1_{idx}"):
                         selected_addons.append(item)
             with col_u2:
                 for idx, item in enumerate(univ_items[half:]):
                     hrs = item.get("labor_hours", 0.5)
-                    label = f"{item['name']} � **${item['price']:,.2f}** (~{hrs:.1f} hr)"
+                    label = f"{item['name']} — **${item['price']:,.2f}** (~{hrs:.1f} hr)"
                     if st.checkbox(label, key=f"univ2_{idx}"):
                         selected_addons.append(item)
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # Custom Modification & Special Request Section
         st.markdown('<div class="accessory-group">', unsafe_allow_html=True)
-        st.markdown("#### ?✍️ Custom Equipment, Welding or Special Requests")
+        st.markdown("#### ✍️ Custom Equipment, Welding or Special Requests")
         st.caption("Need specific D-ring placement, toolboxes, custom side extensions, or custom wiring? Detail your requested modifications below:")
         custom_request_text = st.text_area(
             "Custom Rigging & Fabrication Notes:",
@@ -687,7 +672,6 @@ with col_center:
         )
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Totals Calculation
         addon_total = sum(item["price"] for item in selected_addons)
         total_labor_hours = sum(item.get("labor_hours", 0.0) for item in selected_addons)
         grand_total = base_price + addon_total
@@ -709,16 +693,14 @@ with col_center:
         </div>
         """, unsafe_allow_html=True)
 
-        # Dealership Legal & Pricing Disclaimer
         st.markdown("""
         <div class="disclaimer-card">
-            <strong>?⚠️ AATC Pricing & Quotation Disclaimer:</strong><br>
+            <strong>⚠️ AATC Pricing & Quotation Disclaimer:</strong><br>
             All prices and equipment configurations are estimates based on live yard inventory and standard installation parameters. Quoted prices do not include applicable state sales tax, county surcharges, title, registration/tag transfer fees, electronic filing fees, or dealer pre-delivery service documentation charges. In-stock units are subject to prior sale. Installation turnaround times depend on shop scheduling and technician bay availability at time of contract execution.
         </div>
         """, unsafe_allow_html=True)
 
-        # Lead Submission
-        st.markdown("### ?? Lock In Your Build Quote & Check Yard Availability")
+        st.markdown("### 📋 Lock In Your Build Quote & Check Yard Availability")
         st.caption("Submit your customized configuration to our sales desk. We'll hold the unit for 24 hours and verify installation scheduling.")
         
         c_name, c_phone, c_email = st.columns(3)
@@ -731,17 +713,15 @@ with col_center:
 
         col_back4, col_sub = st.columns([1, 2])
         with col_back4:
-            if st.button("? Back to Matches"):
+            if st.button("⬅ Back to Matches"):
                 st.session_state.step = 4
                 st.rerun()
         with col_sub:
-            if st.button("?🚀 Lock In Quote & Send to Sales Desk", type="primary", use_container_width=True):
+            if st.button("🚀 Lock In Quote & Send to Sales Desk", type="primary", use_container_width=True):
                 if not cust_name or not cust_phone:
                     st.error("Please enter your name and phone number so the sales team can confirm your reservation.")
                 else:
-                    st.success(f"?🎉 Thank you, {cust_name}! Your custom build quote for the **{trailer['brand']} {trailer['model_name']}** (${grand_total:,.2f}) has been logged.")
+                    st.success(f"🎉 Thank you, {cust_name}! Your custom build quote for the **{trailer['brand']} {trailer['model_name']}** (${grand_total:,.2f}) has been logged.")
                     if custom_request_text.strip():
-                        st.info(f"?? **Special Request Logged:** \"{custom_request_text.strip()}\" � A technician will review this note prior to calling.")
+                        st.info(f"📝 **Special Request Logged:** \"{custom_request_text.strip()}\" — A technician will review this note prior to calling.")
                     st.balloons()
-
-
