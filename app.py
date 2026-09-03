@@ -67,9 +67,9 @@ st.markdown("""
     .step-done { background: #059669; color: #ffffff; }
     .step-todo { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
     .step-text { font-size: 0.75rem; font-weight: 600; margin-top: 5px; color: #334155; }
-    .step-header-banner { border-left: 5px solid #2563eb; padding-left: 1.25rem; margin-bottom: 1.5rem; }
-    .step-banner-title { font-size: 1.5rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem 0; }
-    .step-banner-sub { font-size: 0.95rem; color: #475569; margin: 0; }
+    .step-header-banner { text-align: center; margin: 1rem auto 1.75rem auto; max-width: 680px; }
+    .step-banner-title { font-size: 1.6rem; font-weight: 800; color: #0f172a; margin: 0 0 0.35rem 0; }
+    .step-banner-sub { font-size: 0.95rem; color: #475569; margin: 0; line-height: 1.4; }
     .result-summary-box { background: linear-gradient(135deg, #091e3a 0%, #1e293b 100%); color: white; border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25); }
     .trailer-result-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.75rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04); transition: transform 0.2s ease; }
     .trailer-result-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.08); }
