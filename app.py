@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import json
 import os
 import re
@@ -148,7 +148,8 @@ def load_live_catalog():
                        Product2.StockKeepingUnit, Product2.Family, Product2.GVWR__c,
                        Product2.Load_Capacity__c, Product2.Length__c, Product2.Brake_Type__c,
                        Product2.Tongue_Type__c, Product2.Total_Stock__c, Product2.In_Stock__c,
-                       Product2.Used_Sku__c, UnitPrice
+                       Product2.Used_Sku__c, Product2.WooCommerce_Link__c, Product2.Web_Link__c,
+                       Product2.Web_Image__c, UnitPrice
                 FROM PricebookEntry
                 WHERE IsActive = True
                   AND Product2.Make__c != null
@@ -168,24 +169,18 @@ def load_live_catalog():
                     sku = p.get("SKU_Model__c") or p.get("StockKeepingUnit") or ""
                     retail_price = float(r.get("UnitPrice") or 0.0)
 
-                    # Route by SKU or fall back to main category archive
-                    # Match exact product page from local catalog
+                    # Extract live listing URL directly from Salesforce fields
+                    raw_woo = p.get("WooCommerce_Link__c")
+                    raw_web = p.get("Web_Link__c")
+                    image_url = p.get("Web_Image__c")
+
                     url = "https://allamericantrailer.com/shop/"
-                    if os.path.exists("data/catalog_raw.json"):
-                        try:
-                            with open("data/catalog_raw.json", "r", encoding="utf-8", errors="replace") as f_cat:
-                                cat_data = json.load(f_cat)
-                                s_clean = sku.replace("-BK", "").strip().lower() if sku else ""
-                                t_clean = title.strip().lower() if title else ""
-                                for item in cat_data:
-                                    it_title = str(item.get("title") or item.get("name") or "").lower()
-                                    if (s_clean and s_clean in it_title) or (t_clean and t_clean in it_title):
-                                        direct_url = item.get("url") or item.get("product_url")
-                                        if direct_url:
-                                            url = direct_url
-                                            break
-                        except Exception:
-                            pass
+                    if raw_woo and raw_woo.strip().startswith("http"):
+                        url = raw_woo.strip()
+                    elif raw_web and "http" in raw_web:
+                        m_url = re.search(r'href=["\'](https?://[^"\']+)["\']', raw_web)
+                        if m_url and m_url.group(1).strip():
+                            url = m_url.group(1).strip()
 
                     standardized.append({
                         "id": p.get("Id"),
