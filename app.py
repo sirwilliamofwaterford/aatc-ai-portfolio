@@ -56,217 +56,218 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     
-    /* Target full Streamlit app canvas with AATC Navy */
-    .stApp, [data-testid="stAppViewContainer"], .main {
-        background: linear-gradient(180deg, #0b1c3d 0%, #061024 100%) !important;
-        color: #f8fafc !important;
-        font-family: 'Plus Jakarta Sans', sans-serif;
+    html, body, [class*="css"] { 
+        font-family: 'Plus Jakarta Sans', sans-serif; 
+        color: #0f172a; 
     }
-
-    /* Top Header */
+    .stApp { 
+        background-color: #f8fafc; 
+    }
+    
     .wizard-header { 
         text-align: center; 
-        max-width: 820px; 
-        margin: 0 auto 1.5rem auto; 
+        max-width: 780px; 
+        margin: 0 auto 2rem auto; 
         padding-top: 1rem; 
     }
     .wizard-badge { 
         display: inline-block; 
-        background: rgba(37, 99, 235, 0.2); 
-        border: 1px solid #3b82f6; 
-        color: #93c5fd; 
-        font-size: 0.75rem; 
+        background: #eff6ff; 
+        border: 1px solid #bfdbfe; 
+        color: #1d4ed8; 
+        font-size: 0.8rem; 
         font-weight: 700; 
         text-transform: uppercase; 
-        letter-spacing: 0.6px; 
-        padding: 5px 14px; 
+        letter-spacing: 0.8px; 
+        padding: 6px 14px; 
         border-radius: 9999px; 
         margin-bottom: 0.75rem; 
     }
     .wizard-title { 
-        font-size: 2.35rem; 
+        font-size: 2.25rem; 
         font-weight: 800; 
-        color: #ffffff !important; 
+        color: #0f172a !important; 
         margin-bottom: 0.5rem; 
         letter-spacing: -0.5px; 
     }
     .wizard-sub { 
         font-size: 1.05rem; 
-        color: #cbd5e1 !important; 
+        color: #64748b !important; 
         line-height: 1.5; 
     }
-
-    /* Stepper Bar */
+    
+    /* Centered Pill Stepper */
     .step-bar { 
         display: flex; 
         justify-content: space-between; 
         max-width: 850px; 
-        margin: 0 auto 2.25rem auto; 
-        padding: 0.85rem 2rem; 
-        background: rgba(15, 23, 42, 0.75); 
-        border-radius: 9999px; 
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35); 
-        border: 1px solid rgba(255, 255, 255, 0.12); 
-        backdrop-filter: blur(8px);
+        margin: 0 auto 2.5rem auto; 
+        padding: 0.75rem 1.75rem;
+        background: #ffffff;
+        border-radius: 9999px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        border: 1px solid #e2e8f0;
     }
     .step-node { display: flex; flex-direction: column; align-items: center; }
     .step-circle { 
-        width: 36px; 
-        height: 36px; 
+        width: 38px; 
+        height: 38px; 
         border-radius: 50%; 
         display: flex; 
         align-items: center; 
         justify-content: center; 
         font-weight: 700; 
-        font-size: 0.85rem; 
+        font-size: 0.9rem; 
     }
     .step-active { 
         background: #2563eb; 
         color: #ffffff; 
-        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.4); 
+        box-shadow: 0 0 0 4px #dbeafe; 
     }
     .step-done { 
-        background: #10b981; 
+        background: #059669; 
         color: #ffffff; 
     }
     .step-todo { 
-        background: rgba(255, 255, 255, 0.08); 
-        color: #94a3b8; 
-        border: 1px solid rgba(255, 255, 255, 0.15); 
+        background: #f1f5f9; 
+        color: #64748b; 
+        border: 1px solid #cbd5e1;
     }
     .step-text { 
         font-size: 0.75rem; 
         font-weight: 600; 
         margin-top: 6px; 
-        color: #cbd5e1; 
+        color: #475569; 
     }
 
-    /* Step Banners */
+    /* Centered Step Guidance */
     .step-header-banner { 
         text-align: center; 
         margin: 1rem auto 1.5rem auto; 
-        max-width: 700px; 
+        max-width: 680px; 
     }
     .step-banner-title { 
         font-size: 1.6rem; 
         font-weight: 800; 
-        color: #ffffff !important; 
+        color: #0f172a !important; 
         margin: 0 0 0.35rem 0; 
     }
     .step-banner-sub { 
         font-size: 0.95rem; 
-        color: #94a3b8 !important; 
+        color: #64748b !important; 
         margin: 0; 
         line-height: 1.4; 
     }
 
-    /* Crisp Card Surfaces on Navy */
-    .build-box { 
-        background: #ffffff; 
-        border: 2px solid #3b82f6; 
-        border-radius: 12px; 
-        padding: 1.75rem; 
+    .result-summary-box { 
+        background: linear-gradient(135deg, #091e3a 0%, #1e293b 100%); 
+        color: white; 
+        border-radius: 16px; 
+        padding: 2rem; 
         margin-bottom: 1.5rem; 
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4); 
-        color: #0f172a !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25); 
     }
-    .build-box * {
-        color: #0f172a !important;
-    }
-    .build-box .badge-label {
-        color: #1d4ed8 !important;
-    }
-    .build-box .sub-spec {
-        color: #475569 !important;
-    }
-
     .trailer-result-card { 
         background: #ffffff; 
         border: 1px solid #e2e8f0; 
-        border-radius: 12px; 
+        border-radius: 14px; 
         padding: 1.75rem; 
-        margin-bottom: 1.25rem; 
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25); 
-        color: #0f172a !important;
+        margin-bottom: 1.5rem; 
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04); 
+        transition: transform 0.2s ease; 
     }
-    .trailer-result-card * {
-        color: #0f172a !important;
+    .trailer-result-card:hover { 
+        transform: translateY(-2px); 
+        box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.08); 
     }
-
-    .accessory-group { 
-        background: rgba(15, 23, 42, 0.7); 
-        border: 1px solid rgba(255, 255, 255, 0.12); 
-        border-radius: 12px; 
-        padding: 1.5rem; 
-        margin-bottom: 1.25rem; 
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); 
-        backdrop-filter: blur(8px);
-    }
-    .accessory-group h4 {
-        color: #ffffff !important;
-    }
-
     .spec-grid { 
         display: grid; 
         grid-template-columns: repeat(5, 1fr); 
         gap: 1rem; 
-        margin-top: 1rem; 
-        padding: 0.85rem 0; 
-        border-top: 1px solid #e2e8f0; 
-        border-bottom: 1px solid #e2e8f0; 
+        margin-top: 1.25rem; 
+        padding: 1rem 0; 
+        border-top: 1px solid #f1f5f9; 
+        border-bottom: 1px solid #f1f5f9; 
     }
+    .spec-item { display: flex; flex-direction: column; }
     .spec-label { 
         font-size: 0.7rem; 
-        font-weight: 700; 
-        color: #64748b !important; 
+        font-weight: 600; 
+        color: #64748b; 
         text-transform: uppercase; 
         letter-spacing: 0.5px; 
     }
     .spec-val { 
         font-size: 1.15rem; 
-        font-weight: 800; 
-        color: #0f172a !important; 
+        font-weight: 700; 
+        color: #0f172a; 
         margin-top: 2px; 
     }
-
+    .fit-badge { 
+        display: inline-block; 
+        padding: 6px 12px; 
+        border-radius: 9999px; 
+        font-size: 0.75rem; 
+        font-weight: 700; 
+        text-transform: uppercase; 
+    }
+    .fit-safe { 
+        background: #ecfdf5; 
+        color: #047857; 
+        border: 1px solid #a7f3d0; 
+    }
+    .fit-warn { 
+        background: #fef2f2; 
+        color: #b91c1c; 
+        border: 1px solid #fecaca; 
+    }
+    .build-box { 
+        background: #ffffff; 
+        border: 2px solid #2563eb; 
+        border-radius: 14px; 
+        padding: 1.75rem; 
+        margin-bottom: 1.5rem; 
+    }
     .price-total-badge { 
         background: #059669; 
-        color: #ffffff !important; 
-        padding: 8px 18px; 
+        color: white; 
+        padding: 6px 14px; 
         border-radius: 8px; 
-        font-size: 1.4rem; 
+        font-size: 1.3rem; 
         font-weight: 800; 
     }
+    .accessory-group { 
+        background: #ffffff; 
+        border: 1px solid #e2e8f0; 
+        border-radius: 12px; 
+        padding: 1.25rem; 
+        margin-bottom: 1.25rem; 
+    }
     .disclaimer-card { 
-        background: rgba(15, 23, 42, 0.6); 
-        border: 1px solid rgba(255, 255, 255, 0.15); 
-        border-left: 4px solid #94a3b8; 
+        background: #f8fafc; 
+        border: 1px solid #cbd5e1; 
+        border-left: 4px solid #64748b; 
         border-radius: 8px; 
         padding: 1rem 1.25rem; 
         margin: 1.5rem 0; 
         font-size: 0.8rem; 
-        color: #94a3b8 !important; 
+        color: #475569; 
         line-height: 1.5; 
     }
 
-    /* Form Label Visibility on Dark Background */
-    label, .stRadio label, .stSelectbox label, .stTextInput label, .stTextArea label {
-        color: #f1f5f9 !important;
-        font-weight: 600;
-    }
-    
-    /* Primary Red CTA matching AATC accent */
+    /* Red Primary CTA Button */
     button[kind="primary"] {
         background-color: #dc2626 !important;
         border-color: #b91c1c !important;
         color: #ffffff !important;
-        border-radius: 6px !important;
+        border-radius: 8px !important;
         font-weight: 700 !important;
     }
     button[kind="primary"]:hover {
         background-color: #b91c1c !important;
         border-color: #991b1b !important;
     }
+</style>
 </style>
 </style>
 </style>
