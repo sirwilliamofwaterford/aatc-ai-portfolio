@@ -543,6 +543,31 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# -----------------------------------------------------------------------------
+# AUTO-SCROLL TO TOP ON STEP CHANGE
+# -----------------------------------------------------------------------------
+import streamlit.components.v1 as components
+
+components.html(
+    f"""
+    <script>
+        window.parent.postMessage({{type: 'streamlit:scroll_to_top'}}, '*');
+        try {{
+            window.parent.scrollTo({{top: 0, left: 0, behavior: 'smooth'}});
+        }} catch (e) {{}}
+        window.scrollTo({{top: 0, left: 0, behavior: 'smooth'}});
+        const doc = window.parent.document;
+        if (doc) {{
+            const el = doc.querySelector('.main, [data-testid="stAppViewContainer"], html, body');
+            if (el) {{ el.scrollTop = 0; }}
+        }}
+    </script>
+    <span style="display:none;" id="step_marker_{st.session_state.step}"></span>
+    """,
+    height=0,
+    width=0
+)
+
 col_l, col_center, col_r = st.columns([1, 6, 1])
 
 with col_center:
