@@ -616,75 +616,134 @@ with col_center:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### 🔧 Installed Equipment, Upgrades & Accessories")
-        st.caption("Pricing below reflects full turnkey installed packages including parts, mounting hardware, and dedicated technician labor hours.")
+        st.markdown("### 🔧 Recommended Installed Upgrades")
+        st.caption("Select optional commercial add-ons below. All pricing reflects full turnkey installation by our certified technicians.")
 
         selected_addons = []
 
+        # 1. TRAILER-SPECIFIC ESSENTIALS (Tarp / Racks / E-Track)
         if "dump" in cat_lower:
-            dump_items = [a for a in ALL_ACCESSORIES if a["category"] == "Dump"]
-            if dump_items:
-                st.markdown('<div class="accessory-group"><h4>🪨 Verified Dump Trailer Add-Ons</h4>', unsafe_allow_html=True)
-                for idx, item in enumerate(dump_items):
-                    hrs = item.get("labor_hours", 1.0)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
-                    if st.checkbox(label, key=f"dump_{idx}"):
-                        selected_addons.append(item)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        elif "cargo" in cat_lower or "enclosed" in cat_lower:
-            cargo_items = [a for a in ALL_ACCESSORIES if a["category"] == "Enclosed"]
-            if cargo_items:
-                st.markdown('<div class="accessory-group"><h4>📦 Verified Enclosed Cargo Add-Ons</h4>', unsafe_allow_html=True)
-                for idx, item in enumerate(cargo_items):
-                    hrs = item.get("labor_hours", 1.0)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
-                    if st.checkbox(label, key=f"cargo_{idx}"):
-                        selected_addons.append(item)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        elif "util" in cat_lower or "landscape" in cat_lower:
-            land_items = [a for a in ALL_ACCESSORIES if a["category"] == "Landscape"]
-            if land_items:
-                st.markdown('<div class="accessory-group"><h4>🌿 Verified Commercial Landscape Add-Ons</h4>', unsafe_allow_html=True)
-                for idx, item in enumerate(land_items):
-                    hrs = item.get("labor_hours", 0.5)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (Includes shop install ~{hrs:.1f} hr labor)"
-                    if st.checkbox(label, key=f"land_{idx}"):
-                        selected_addons.append(item)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        univ_items = [a for a in ALL_ACCESSORIES if a["category"] == "Universal"]
-        if univ_items:
-            st.markdown('<div class="accessory-group"><h4>🛡️ Universal Straps, Winches & Road Essentials</h4>', unsafe_allow_html=True)
-            col_u1, col_u2 = st.columns(2)
-            half = (len(univ_items) + 1) // 2
-            with col_u1:
-                for idx, item in enumerate(univ_items[:half]):
-                    hrs = item.get("labor_hours", 0.5)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (~{hrs:.1f} hr)"
-                    if st.checkbox(label, key=f"univ1_{idx}"):
-                        selected_addons.append(item)
-            with col_u2:
-                for idx, item in enumerate(univ_items[half:]):
-                    hrs = item.get("labor_hours", 0.5)
-                    label = f"{item['name']} — **${item['price']:,.2f}** (~{hrs:.1f} hr)"
-                    if st.checkbox(label, key=f"univ2_{idx}"):
-                        selected_addons.append(item)
+            st.markdown('<div class="accessory-group"><h4 style="margin:0 0 8px 0; color:#0f172a;">🪨 Dump Bed Protection</h4>', unsafe_allow_html=True)
+            tarp_choice = st.radio(
+                "Mesh Tarp Kit Options:",
+                [
+                    "No Tarp Kit (Trailer Only)",
+                    "Standard Retractable Heavy-Duty Mesh Tarp Kit (Turnkey Installed) — $315.00",
+                    "Commercial Heavy-Duty Crank Arm Tarp Kit (Turnkey Installed) — $350.00"
+                ],
+                index=0
+            )
+            if "315.00" in tarp_choice:
+                selected_addons.append({"name": "Standard Dump Tarp Kit Installed", "price": 315.00, "labor_hours": 1.0})
+            elif "350.00" in tarp_choice:
+                selected_addons.append({"name": "Commercial Crank Arm Tarp Kit Installed", "price": 350.00, "labor_hours": 1.25})
             st.markdown('</div>', unsafe_allow_html=True)
 
+        elif "cargo" in cat_lower or "enclosed" in cat_lower:
+            st.markdown('<div class="accessory-group"><h4 style="margin:0 0 8px 0; color:#0f172a;">📦 Interior & Roof Cargo Upgrades</h4>', unsafe_allow_html=True)
+            c_encl1, c_encl2 = st.columns(2)
+            with c_encl1:
+                etrack = st.selectbox(
+                    "Wall/Floor Cargo E-Track:",
+                    [
+                        "No E-Track System",
+                        "Install (2) 10-ft Strips Floor E-Track — $235.00",
+                        "Install (2) Full-Length Wall E-Track Strips — $320.00"
+                    ]
+                )
+                if "$235.00" in etrack:
+                    selected_addons.append({"name": "Floor E-Track Installed (2 Strips)", "price": 235.00, "labor_hours": 1.0})
+                elif "$320.00" in etrack:
+                    selected_addons.append({"name": "Wall E-Track Installed (2 Strips)", "price": 320.00, "labor_hours": 1.25})
+
+            with c_encl2:
+                racks = st.selectbox(
+                    "Exterior Ladder Racks:",
+                    [
+                        "No Roof Ladder Racks",
+                        "(2) Heavy-Duty Aluminum Ladder Racks — $350.00",
+                        "(3) Heavy-Duty Aluminum Ladder Racks — $475.00"
+                    ]
+                )
+                if "$350.00" in racks:
+                    selected_addons.append({"name": "2-Bar Roof Ladder Rack Installed", "price": 350.00, "labor_hours": 1.25})
+                elif "$475.00" in racks:
+                    selected_addons.append({"name": "3-Bar Roof Ladder Rack Installed", "price": 475.00, "labor_hours": 1.5})
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        elif "util" in cat_lower or "landscape" in cat_lower:
+            st.markdown('<div class="accessory-group"><h4 style="margin:0 0 8px 0; color:#0f172a;">🌿 Landscaping & Equipment Racks</h4>', unsafe_allow_html=True)
+            c_land1, c_land2 = st.columns(2)
+            with c_land1:
+                trimmers = st.checkbox("Lockable 4-Position Trimmer Rack (Keyed Padlocks) — $290.00")
+                if trimmers:
+                    selected_addons.append({"name": "Lockable 4-Trimmer Rack Installed", "price": 290.00, "labor_hours": 0.75})
+                tool_rack = st.checkbox("6-Position Hand Tool Rack (Shovels, Rakes) — $150.00")
+                if tool_rack:
+                    selected_addons.append({"name": "6-Position Tool Rack Installed", "price": 150.00, "labor_hours": 0.5})
+            with c_land2:
+                blower_rack = st.checkbox("Backpack Blower Locking Bracket — $310.00")
+                if blower_rack:
+                    selected_addons.append({"name": "Backpack Blower Rack Installed", "price": 310.00, "labor_hours": 0.5})
+                cooler_rack = st.checkbox("5-Gallon Water Cooler Wire Rack & Strap — $95.00")
+                if cooler_rack:
+                    selected_addons.append({"name": "Water Cooler Rack Installed", "price": 95.00, "labor_hours": 0.25})
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # 2. UNIVERSAL ROAD ESSENTIALS (Consolidated Dropdowns)
+        st.markdown('<div class="accessory-group"><h4 style="margin:0 0 8px 0; color:#0f172a;">🛡️ Road & Tie-Down Package</h4>', unsafe_allow_html=True)
+        col_opt1, col_opt2 = st.columns(2)
+
+        with col_opt1:
+            spare_choice = st.selectbox(
+                "Spare Tire & Rim Package:",
+                [
+                    "No Spare Tire",
+                    "Matching Radial Spare Tire Only — $175.00",
+                    "Matching Radial Spare + Welded Tongue Mount — $205.00",
+                    "Heavy-Duty 8-Lug Commercial Spare + Mount — $315.00"
+                ]
+            )
+            if "$175.00" in spare_choice:
+                selected_addons.append({"name": "Matching Radial Spare Tire", "price": 175.00, "labor_hours": 0.1})
+            elif "$205.00" in spare_choice:
+                selected_addons.append({"name": "Spare Tire with Welded Mount Installed", "price": 205.00, "labor_hours": 0.35})
+            elif "$315.00" in spare_choice:
+                selected_addons.append({"name": "8-Lug Commercial Spare with Mount Installed", "price": 315.00, "labor_hours": 0.35})
+
+        with col_opt2:
+            winch_choice = st.selectbox(
+                "Tie-Down & Winch Straps:",
+                [
+                    "Standard D-Rings / Stake Pockets Only",
+                    "(2) Weld-On Winches with 4\"x30' Heavy Straps — $270.00",
+                    "(4) Weld-On Winches with 4\"x30' Heavy Straps — $430.00",
+                    "Set of (4) Pro 10,000 lb Axle Ratchet Straps — $140.00"
+                ]
+            )
+            if "$270.00" in winch_choice:
+                selected_addons.append({"name": "2 Weld-On Winches with Straps Installed", "price": 270.00, "labor_hours": 0.75})
+            elif "$430.00" in winch_choice:
+                selected_addons.append({"name": "4 Weld-On Winches with Straps Installed", "price": 430.00, "labor_hours": 1.0})
+            elif "$140.00" in winch_choice:
+                selected_addons.append({"name": "Set of 4 Pro 10K Axle Straps", "price": 140.00, "labor_hours": 0.0})
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
         st.markdown('<div class="accessory-group">', unsafe_allow_html=True)
-        st.markdown("#### ✍️ Custom Equipment, Welding or Special Requests")
-        st.caption("Need specific D-ring placement, toolboxes, custom side extensions, or custom wiring? Detail your requested modifications below:")
+        st.markdown("<h4 style='margin:0 0 4px 0; color:#0f172a;'>✍️ Custom Upgrades & Fabrication Notes</h4>", unsafe_allow_html=True)
+        st.caption("Need recessed D-rings, toolboxes, custom side extensions, or specific wiring? Detail your requested modifications below:")
         custom_request_text = st.text_area(
             "Custom Rigging & Fabrication Notes:",
-            placeholder="e.g. Please add 4 recessed D-rings welded at 4-foot intervals along the outer deck, and quote an aluminum tongue-mounted toolbox.",
-            height=90
+            placeholder="e.g. Please quote an aluminum tongue-mounted toolbox and 4 recessed floor D-rings.",
+            height=80,
+            label_visibility="collapsed"
         )
         st.markdown('</div>', unsafe_allow_html=True)
 
         addon_total = sum(item["price"] for item in selected_addons)
         total_labor_hours = sum(item.get("labor_hours", 0.0) for item in selected_addons)
+        
         grand_total = base_price + addon_total
 
         st.markdown("---")
