@@ -53,37 +53,223 @@ if not st.session_state.is_authenticated:
 # -----------------------------------------------------------------------------
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-    html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; color: #0f172a; }
-    .stApp { background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%); }
-    .wizard-header { text-align: center; max-width: 800px; margin: 0 auto 2rem auto; padding-top: 1.5rem; }
-    .wizard-badge { display: inline-block; background: #dbeafe; border: 1px solid #93c5fd; color: #1e40af; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 6px 14px; border-radius: 9999px; margin-bottom: 0.75rem; }
-    .wizard-title { font-size: 2.35rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem; letter-spacing: -0.5px; }
-    .wizard-sub { font-size: 1.05rem; color: #475569; line-height: 1.5; }
-    .step-bar { display: flex; justify-content: space-between; max-width: 850px; margin: 0 auto 2.5rem auto; padding: 0.75rem 1.5rem; background: #ffffff; border-radius: 9999px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; }
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    
+    /* Salesforce Lightning Base */
+    html, body, [class*="css"] { 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+        color: #080707; 
+    }
+    .stApp { 
+        background: #f3f2f2 !important; 
+    }
+    
+    /* Header & SLDS Badges */
+    .wizard-header { 
+        text-align: center; 
+        max-width: 820px; 
+        margin: 0 auto 1.75rem auto; 
+        padding-top: 1rem; 
+    }
+    .wizard-badge { 
+        display: inline-block; 
+        background: #eef4ff; 
+        border: 1px solid #aacbff; 
+        color: #0176d3; 
+        font-size: 0.75rem; 
+        font-weight: 700; 
+        text-transform: uppercase; 
+        letter-spacing: 0.5px; 
+        padding: 4px 12px; 
+        border-radius: 4px; 
+        margin-bottom: 0.75rem; 
+    }
+    .wizard-title { 
+        font-size: 2.2rem; 
+        font-weight: 700; 
+        color: #080707; 
+        margin-bottom: 0.5rem; 
+        letter-spacing: -0.5px; 
+    }
+    .wizard-sub { 
+        font-size: 1rem; 
+        color: #3e3e3c; 
+        line-height: 1.5; 
+    }
+
+    /* SLDS Path / Stepper Bar */
+    .step-bar { 
+        display: flex; 
+        justify-content: space-between; 
+        max-width: 850px; 
+        margin: 0 auto 2rem auto; 
+        padding: 0.85rem 2rem; 
+        background: #ffffff; 
+        border-radius: 6px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+        border: 1px solid #dddbda; 
+    }
     .step-node { display: flex; flex-direction: column; align-items: center; }
-    .step-circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; }
-    .step-active { background: #1d4ed8; color: #ffffff; box-shadow: 0 0 0 4px #bfdbfe; }
-    .step-done { background: #059669; color: #ffffff; }
-    .step-todo { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
-    .step-text { font-size: 0.75rem; font-weight: 600; margin-top: 5px; color: #334155; }
-    .step-header-banner { text-align: center; margin: 1rem auto 1.75rem auto; max-width: 680px; }
-    .step-banner-title { font-size: 1.6rem; font-weight: 800; color: #0f172a; margin: 0 0 0.35rem 0; }
-    .step-banner-sub { font-size: 0.95rem; color: #475569; margin: 0; line-height: 1.4; }
-    .result-summary-box { background: linear-gradient(135deg, #091e3a 0%, #1e293b 100%); color: white; border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25); }
-    .trailer-result-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.75rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04); transition: transform 0.2s ease; }
-    .trailer-result-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.08); }
-    .spec-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-top: 1.25rem; padding: 1rem 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; }
-    .spec-item { display: flex; flex-direction: column; }
-    .spec-label { font-size: 0.7rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
-    .spec-val { font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-top: 2px; }
-    .fit-badge { display: inline-block; padding: 6px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
-    .fit-safe { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
-    .fit-warn { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-    .build-box { background: #ffffff; border: 2px solid #2563eb; border-radius: 14px; padding: 1.75rem; margin-bottom: 1.5rem; }
-    .price-total-badge { background: #059669; color: white; padding: 6px 14px; border-radius: 8px; font-size: 1.3rem; font-weight: 800; }
-    .accessory-group { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; }
-    .disclaimer-card { background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #64748b; border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; font-size: 0.8rem; color: #475569; line-height: 1.5; }
+    .step-circle { 
+        width: 32px; 
+        height: 32px; 
+        border-radius: 50%; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        font-weight: 700; 
+        font-size: 0.85rem; 
+    }
+    .step-active { 
+        background: #0176d3; 
+        color: #ffffff; 
+        box-shadow: 0 0 0 3px #cce5ff; 
+    }
+    .step-done { 
+        background: #2e844a; 
+        color: #ffffff; 
+    }
+    .step-todo { 
+        background: #f3f2f2; 
+        color: #706e6b; 
+        border: 1px solid #c9c7c5; 
+    }
+    .step-text { 
+        font-size: 0.75rem; 
+        font-weight: 600; 
+        margin-top: 6px; 
+        color: #3e3e3c; 
+    }
+
+    /* Step Banners */
+    .step-header-banner { 
+        text-align: center; 
+        margin: 1rem auto 1.5rem auto; 
+        max-width: 700px; 
+    }
+    .step-banner-title { 
+        font-size: 1.5rem; 
+        font-weight: 700; 
+        color: #080707; 
+        margin: 0 0 0.35rem 0; 
+    }
+    .step-banner-sub { 
+        font-size: 0.95rem; 
+        color: #3e3e3c; 
+        margin: 0; 
+        line-height: 1.4; 
+    }
+
+    /* SLDS Card Surfaces */
+    .result-summary-box { 
+        background: #001639; 
+        color: #ffffff; 
+        border-radius: 6px; 
+        padding: 1.75rem; 
+        margin-bottom: 1.5rem; 
+        box-shadow: 0 4px 12px rgba(0, 22, 57, 0.15); 
+        border: 1px solid #032d60; 
+    }
+    .trailer-result-card { 
+        background: #ffffff; 
+        border: 1px solid #dddbda; 
+        border-radius: 6px; 
+        padding: 1.5rem; 
+        margin-bottom: 1.25rem; 
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); 
+    }
+    .spec-grid { 
+        display: grid; 
+        grid-template-columns: repeat(5, 1fr); 
+        gap: 1rem; 
+        margin-top: 1rem; 
+        padding: 0.85rem 0; 
+        border-top: 1px solid #f3f2f2; 
+        border-bottom: 1px solid #f3f2f2; 
+    }
+    .spec-label { 
+        font-size: 0.7rem; 
+        font-weight: 600; 
+        color: #706e6b; 
+        text-transform: uppercase; 
+        letter-spacing: 0.5px; 
+    }
+    .spec-val { 
+        font-size: 1.15rem; 
+        font-weight: 700; 
+        color: #080707; 
+        margin-top: 2px; 
+    }
+    
+    /* SLDS Badges */
+    .fit-badge { 
+        display: inline-block; 
+        padding: 4px 10px; 
+        border-radius: 4px; 
+        font-size: 0.75rem; 
+        font-weight: 700; 
+        text-transform: uppercase; 
+    }
+    .fit-safe { 
+        background: #eaf5ea; 
+        color: #2e844a; 
+        border: 1px solid #b7e1b7; 
+    }
+    .fit-warn { 
+        background: #fef1ed; 
+        color: #ea001e; 
+        border: 1px solid #fbc9b9; 
+    }
+
+    /* Selected Build & Accessory Cards */
+    .build-box { 
+        background: #ffffff; 
+        border: 2px solid #0176d3; 
+        border-radius: 6px; 
+        padding: 1.5rem; 
+        margin-bottom: 1.5rem; 
+        box-shadow: 0 2px 6px rgba(1, 118, 211, 0.1); 
+    }
+    .accessory-group { 
+        background: #ffffff; 
+        border: 1px solid #dddbda; 
+        border-radius: 6px; 
+        padding: 1.25rem; 
+        margin-bottom: 1.25rem; 
+        box-shadow: 0 2px 3px rgba(0,0,0,0.03); 
+    }
+    .price-total-badge { 
+        background: #2e844a; 
+        color: white; 
+        padding: 6px 14px; 
+        border-radius: 4px; 
+        font-size: 1.3rem; 
+        font-weight: 700; 
+    }
+    .disclaimer-card { 
+        background: #fafaf9; 
+        border: 1px solid #dddbda; 
+        border-left: 4px solid #706e6b; 
+        border-radius: 4px; 
+        padding: 0.9rem 1.2rem; 
+        margin: 1.5rem 0; 
+        font-size: 0.8rem; 
+        color: #3e3e3c; 
+        line-height: 1.5; 
+    }
+
+    /* Buttons to match SLDS Brand / Neutral */
+    button[kind="primary"] {
+        background-color: #0176d3 !important;
+        border-color: #0176d3 !important;
+        border-radius: 4px !important;
+    }
+    button[kind="primary"]:hover {
+        background-color: #014486 !important;
+        border-color: #014486 !important;
+    }
+</style>
 </style>
 """, unsafe_allow_html=True)
 
