@@ -54,66 +54,65 @@ if not st.session_state.is_authenticated:
 st.markdown("""
 <style>
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     
-    /* Salesforce Lightning Base */
-    html, body, [class*="css"] { 
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-        color: #080707; 
+    /* Target full Streamlit app canvas with AATC Navy */
+    .stApp, [data-testid="stAppViewContainer"], .main {
+        background: linear-gradient(180deg, #0b1c3d 0%, #061024 100%) !important;
+        color: #f8fafc !important;
+        font-family: 'Plus Jakarta Sans', sans-serif;
     }
-    .stApp { 
-        background: #f3f2f2 !important; 
-    }
-    
-    /* Header & SLDS Badges */
+
+    /* Top Header */
     .wizard-header { 
         text-align: center; 
         max-width: 820px; 
-        margin: 0 auto 1.75rem auto; 
+        margin: 0 auto 1.5rem auto; 
         padding-top: 1rem; 
     }
     .wizard-badge { 
         display: inline-block; 
-        background: #eef4ff; 
-        border: 1px solid #aacbff; 
-        color: #0176d3; 
+        background: rgba(37, 99, 235, 0.2); 
+        border: 1px solid #3b82f6; 
+        color: #93c5fd; 
         font-size: 0.75rem; 
         font-weight: 700; 
         text-transform: uppercase; 
-        letter-spacing: 0.5px; 
-        padding: 4px 12px; 
-        border-radius: 4px; 
+        letter-spacing: 0.6px; 
+        padding: 5px 14px; 
+        border-radius: 9999px; 
         margin-bottom: 0.75rem; 
     }
     .wizard-title { 
-        font-size: 2.2rem; 
-        font-weight: 700; 
-        color: #080707; 
+        font-size: 2.35rem; 
+        font-weight: 800; 
+        color: #ffffff !important; 
         margin-bottom: 0.5rem; 
         letter-spacing: -0.5px; 
     }
     .wizard-sub { 
-        font-size: 1rem; 
-        color: #3e3e3c; 
+        font-size: 1.05rem; 
+        color: #cbd5e1 !important; 
         line-height: 1.5; 
     }
 
-    /* SLDS Path / Stepper Bar */
+    /* Stepper Bar */
     .step-bar { 
         display: flex; 
         justify-content: space-between; 
         max-width: 850px; 
-        margin: 0 auto 2rem auto; 
+        margin: 0 auto 2.25rem auto; 
         padding: 0.85rem 2rem; 
-        background: #ffffff; 
-        border-radius: 6px; 
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
-        border: 1px solid #dddbda; 
+        background: rgba(15, 23, 42, 0.75); 
+        border-radius: 9999px; 
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35); 
+        border: 1px solid rgba(255, 255, 255, 0.12); 
+        backdrop-filter: blur(8px);
     }
     .step-node { display: flex; flex-direction: column; align-items: center; }
     .step-circle { 
-        width: 32px; 
-        height: 32px; 
+        width: 36px; 
+        height: 36px; 
         border-radius: 50%; 
         display: flex; 
         align-items: center; 
@@ -122,24 +121,24 @@ st.markdown("""
         font-size: 0.85rem; 
     }
     .step-active { 
-        background: #0176d3; 
+        background: #2563eb; 
         color: #ffffff; 
-        box-shadow: 0 0 0 3px #cce5ff; 
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.4); 
     }
     .step-done { 
-        background: #2e844a; 
+        background: #10b981; 
         color: #ffffff; 
     }
     .step-todo { 
-        background: #f3f2f2; 
-        color: #706e6b; 
-        border: 1px solid #c9c7c5; 
+        background: rgba(255, 255, 255, 0.08); 
+        color: #94a3b8; 
+        border: 1px solid rgba(255, 255, 255, 0.15); 
     }
     .step-text { 
         font-size: 0.75rem; 
         font-weight: 600; 
         margin-top: 6px; 
-        color: #3e3e3c; 
+        color: #cbd5e1; 
     }
 
     /* Step Banners */
@@ -149,126 +148,126 @@ st.markdown("""
         max-width: 700px; 
     }
     .step-banner-title { 
-        font-size: 1.5rem; 
-        font-weight: 700; 
-        color: #080707; 
+        font-size: 1.6rem; 
+        font-weight: 800; 
+        color: #ffffff !important; 
         margin: 0 0 0.35rem 0; 
     }
     .step-banner-sub { 
         font-size: 0.95rem; 
-        color: #3e3e3c; 
+        color: #94a3b8 !important; 
         margin: 0; 
         line-height: 1.4; 
     }
 
-    /* SLDS Card Surfaces */
-    .result-summary-box { 
-        background: #001639; 
-        color: #ffffff; 
-        border-radius: 6px; 
+    /* Crisp Card Surfaces on Navy */
+    .build-box { 
+        background: #ffffff; 
+        border: 2px solid #3b82f6; 
+        border-radius: 12px; 
         padding: 1.75rem; 
         margin-bottom: 1.5rem; 
-        box-shadow: 0 4px 12px rgba(0, 22, 57, 0.15); 
-        border: 1px solid #032d60; 
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4); 
+        color: #0f172a !important;
     }
+    .build-box * {
+        color: #0f172a !important;
+    }
+    .build-box .badge-label {
+        color: #1d4ed8 !important;
+    }
+    .build-box .sub-spec {
+        color: #475569 !important;
+    }
+
     .trailer-result-card { 
         background: #ffffff; 
-        border: 1px solid #dddbda; 
-        border-radius: 6px; 
+        border: 1px solid #e2e8f0; 
+        border-radius: 12px; 
+        padding: 1.75rem; 
+        margin-bottom: 1.25rem; 
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25); 
+        color: #0f172a !important;
+    }
+    .trailer-result-card * {
+        color: #0f172a !important;
+    }
+
+    .accessory-group { 
+        background: rgba(15, 23, 42, 0.7); 
+        border: 1px solid rgba(255, 255, 255, 0.12); 
+        border-radius: 12px; 
         padding: 1.5rem; 
         margin-bottom: 1.25rem; 
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); 
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); 
+        backdrop-filter: blur(8px);
     }
+    .accessory-group h4 {
+        color: #ffffff !important;
+    }
+
     .spec-grid { 
         display: grid; 
         grid-template-columns: repeat(5, 1fr); 
         gap: 1rem; 
         margin-top: 1rem; 
         padding: 0.85rem 0; 
-        border-top: 1px solid #f3f2f2; 
-        border-bottom: 1px solid #f3f2f2; 
+        border-top: 1px solid #e2e8f0; 
+        border-bottom: 1px solid #e2e8f0; 
     }
     .spec-label { 
         font-size: 0.7rem; 
-        font-weight: 600; 
-        color: #706e6b; 
+        font-weight: 700; 
+        color: #64748b !important; 
         text-transform: uppercase; 
         letter-spacing: 0.5px; 
     }
     .spec-val { 
         font-size: 1.15rem; 
-        font-weight: 700; 
-        color: #080707; 
+        font-weight: 800; 
+        color: #0f172a !important; 
         margin-top: 2px; 
     }
-    
-    /* SLDS Badges */
-    .fit-badge { 
-        display: inline-block; 
-        padding: 4px 10px; 
-        border-radius: 4px; 
-        font-size: 0.75rem; 
-        font-weight: 700; 
-        text-transform: uppercase; 
-    }
-    .fit-safe { 
-        background: #eaf5ea; 
-        color: #2e844a; 
-        border: 1px solid #b7e1b7; 
-    }
-    .fit-warn { 
-        background: #fef1ed; 
-        color: #ea001e; 
-        border: 1px solid #fbc9b9; 
-    }
 
-    /* Selected Build & Accessory Cards */
-    .build-box { 
-        background: #ffffff; 
-        border: 2px solid #0176d3; 
-        border-radius: 6px; 
-        padding: 1.5rem; 
-        margin-bottom: 1.5rem; 
-        box-shadow: 0 2px 6px rgba(1, 118, 211, 0.1); 
-    }
-    .accessory-group { 
-        background: #ffffff; 
-        border: 1px solid #dddbda; 
-        border-radius: 6px; 
-        padding: 1.25rem; 
-        margin-bottom: 1.25rem; 
-        box-shadow: 0 2px 3px rgba(0,0,0,0.03); 
-    }
     .price-total-badge { 
-        background: #2e844a; 
-        color: white; 
-        padding: 6px 14px; 
-        border-radius: 4px; 
-        font-size: 1.3rem; 
-        font-weight: 700; 
+        background: #059669; 
+        color: #ffffff !important; 
+        padding: 8px 18px; 
+        border-radius: 8px; 
+        font-size: 1.4rem; 
+        font-weight: 800; 
     }
     .disclaimer-card { 
-        background: #fafaf9; 
-        border: 1px solid #dddbda; 
-        border-left: 4px solid #706e6b; 
-        border-radius: 4px; 
-        padding: 0.9rem 1.2rem; 
+        background: rgba(15, 23, 42, 0.6); 
+        border: 1px solid rgba(255, 255, 255, 0.15); 
+        border-left: 4px solid #94a3b8; 
+        border-radius: 8px; 
+        padding: 1rem 1.25rem; 
         margin: 1.5rem 0; 
         font-size: 0.8rem; 
-        color: #3e3e3c; 
+        color: #94a3b8 !important; 
         line-height: 1.5; 
     }
 
-    /* Buttons to match SLDS Brand / Neutral */
+    /* Form Label Visibility on Dark Background */
+    label, .stRadio label, .stSelectbox label, .stTextInput label, .stTextArea label {
+        color: #f1f5f9 !important;
+        font-weight: 600;
+    }
+    
+    /* Primary Red CTA matching AATC accent */
     button[kind="primary"] {
-        background-color: #0176d3 !important;
-        border-color: #0176d3 !important;
-        border-radius: 4px !important;
+        background-color: #dc2626 !important;
+        border-color: #b91c1c !important;
+        color: #ffffff !important;
+        border-radius: 6px !important;
+        font-weight: 700 !important;
     }
     button[kind="primary"]:hover {
-        background-color: #014486 !important;
-        border-color: #014486 !important;
+        background-color: #b91c1c !important;
+        border-color: #991b1b !important;
     }
+</style>
 </style>
 </style>
 """, unsafe_allow_html=True)
